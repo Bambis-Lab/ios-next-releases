@@ -1,0 +1,98 @@
+{
+  "name": "iOS Next",
+  "identifier": "de.nicofroeba16.iosnext.source",
+  "sourceURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/source.json",
+  "apps": [
+    {
+      "name": "iOS Next",
+      "bundleIdentifier": "de.nicofroeba16.iosnext",
+      "developerName": "nicofroeba16-cell",
+      "subtitle": "Native Home Assistant smart-home client",
+      "localizedDescription": "iOS Next is a native iOS client for Home Assistant and smart-home control.",
+      "iconURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/assets/icon.jpg",
+      "versions": [
+        {
+          "version": "1.0.9",
+          "date": "2026-09-21T04:20:42Z",
+          "localizedDescription": "- New unified Control Center combining Runner and Owner Control behind the existing Owner login, token, Face ID and device binding.\n- Owner access removed from Chat and moved to System → Control Center.\n- Runner dashboard expanded with tappable details for registered, free and busy runners plus CPU, RAM and storage.\n- Runner/job contracts prepared for runner names, labels, repositories, branches, workflows and active jobs.\n- Commander Live lifecycle fixed so opening detail views no longer drops LIVE to OFFLINE.\n- Normal navigation cancellation no longer appears as “Runner-Aktion fehlgeschlagen — cancelled”.\n- Owner projects, workflows, logs, diagnostics, backups, systems, security, communication, releases and tickets integrated into Control Center.\n- Owner Health Check works safely in observe mode; CI metadata support and protected GitHub token configuration prepared.\n- Light Master fixed to control Home Assistant groups through the correct homeassistant service domain.\n- Media Master now shows “Alle Medien anschalten” when everything is off and hides irrelevant volume/playback controls while the media zone is off.\n- Focus-ready moon accent updated to the matching indigo Focus/Do Not Disturb color.\n- New polished startup reveal and Control Center unlock animation driven by a deterministic 120 Hz motion timeline with Reduce Motion support.\n- New semantic sound and haptic feedback system for navigation, device-state changes, errors and secure Control Center unlocks.\n- Repository mapping corrected for the current iOS-App repository and release/readiness checks expanded.",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.9/IOSNext.ipa",
+          "size": 5502597,
+          "minOSVersion": "27.0",
+          "buildVersion": "11"
+        },
+        {
+          "version": "1.0.8",
+          "date": "2026-09-20T20:43:00Z",
+          "localizedDescription": "iOS Next 1.0.8 (Build 10) — Commander Live status integration",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.8/IOSNext.ipa",
+          "size": 5365283,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.7",
+          "date": "2026-09-20T19:48:28Z",
+          "localizedDescription": "iOS Next 1.0.7 (Build 9)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.7/IOSNext.ipa",
+          "size": 5260148,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.6",
+          "date": "2026-09-20T10:00:23Z",
+          "localizedDescription": "iOS Next 1.0.6 (Build 8)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.6/IOSNext.ipa",
+          "size": 5155779,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.5",
+          "date": "2026-09-20T02:46:56",
+          "localizedDescription": "iOS Next 1.0.5 (Build 6)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.5/IOSNext.ipa",
+          "size": 4694889,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.4",
+          "date": "2026-09-20T01:27:08",
+          "localizedDescription": "iOS Next 1.0.4 (Build 5)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.4/IOSNext.ipa",
+          "size": 4709625,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.3",
+          "date": "2026-09-19T23:31:11",
+          "localizedDescription": "iOS Next 1.0.3 (Build 4)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.3/IOSNext.ipa",
+          "size": 4444538,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.2",
+          "date": "2026-09-19T22:46:00",
+          "localizedDescription": "iOS Next 1.0.2 (Build 3)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.2/IOSNext.ipa",
+          "size": 3010174,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0.1",
+          "date": "2026-09-19",
+          "localizedDescription": "iOS Next 1.0.1 (Build 2)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.1/IOSNext-Free-unsigned.ipa",
+          "size": 2578103,
+          "minOSVersion": "27.0"
+        },
+        {
+          "version": "1.0",
+          "date": "2026-09-19",
+          "localizedDescription": "Initial SideStore release — iOS Next 1.0 (Build 1)",
+          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.0/IOSNext-Free-unsigned.ipa",
+          "size": 2577476,
+          "minOSVersion": "27.0"
+        }
+      ]
+    }
+  ]
+}
