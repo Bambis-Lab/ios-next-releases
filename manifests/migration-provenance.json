@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "target_repository": "Bambis-Lab/ios-next-releases",
+  "source_repository": "nicofroeba16-cell/iOS-App-Release-",
+  "source_commit": "538e65e8249a1cac160d9e3d9af104e20945bb8a",
+  "distribution_kind": "public-sidestore-metadata",
+  "publish_cutover": false
+}
