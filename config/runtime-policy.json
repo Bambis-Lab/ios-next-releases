@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "release_publish": false,
+  "tag_create": false,
+  "asset_upload": false,
+  "source_feed_mutation_in_ci": false,
+  "signing_credentials": false,
+  "app_store_publish": false
+}
