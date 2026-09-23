@@ -1,7 +1,7 @@
 {
   "name": "iOS Next Beta",
   "identifier": "de.nicofroeba16.iosnext.beta.source",
-  "sourceURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/source-beta.json",
+  "sourceURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/source-beta.json",
   "apps": [
     {
       "name": "iOS Next Beta",
@@ -9,7 +9,7 @@
       "developerName": "nicofroeba16-cell",
       "subtitle": "Beta channel for iOS Next",
       "localizedDescription": "Private beta channel for iOS Next. Uses the same bundle identifier as Stable and replaces the installed Stable app when activated.",
-      "iconURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/assets/icon.jpg",
+      "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
           "version": "1.0.10",

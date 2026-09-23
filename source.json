@@ -1,7 +1,7 @@
 {
   "name": "iOS Next",
   "identifier": "de.nicofroeba16.iosnext.source",
-  "sourceURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/source.json",
+  "sourceURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/source.json",
   "apps": [
     {
       "name": "iOS Next",
@@ -9,7 +9,7 @@
       "developerName": "nicofroeba16-cell",
       "subtitle": "Native Home Assistant smart-home client",
       "localizedDescription": "iOS Next is a native iOS client for Home Assistant and smart-home control.",
-      "iconURL": "https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/assets/icon.jpg",
+      "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
           "version": "1.0.9",

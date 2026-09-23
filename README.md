@@ -8,11 +8,11 @@ The private application source code is maintained separately and is not publishe
 
 Raw source URL:
 
-`https://raw.githubusercontent.com/nicofroeba16-cell/iOS-App-Release-/main/source.json`
+`https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/source.json`
 
 SideStore deep link:
 
-`sidestore://source?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnicofroeba16-cell%2FiOS-App-Release-%2Fmain%2Fsource.json`
+`sidestore://source?url=https%3A%2F%2Fraw.githubusercontent.com%2FBambis-Lab%2Fios-next-releases%2Fmain%2Fsource.json`
 
 ## App identity
 
