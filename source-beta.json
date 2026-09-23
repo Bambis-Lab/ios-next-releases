@@ -6,7 +6,7 @@
     {
       "name": "iOS Next Beta",
       "bundleIdentifier": "de.nicofroeba16.iosnext",
-      "developerName": "nicofroeba16-cell",
+      "developerName": "Bambis-Lab",
       "subtitle": "Beta channel for iOS Next",
       "localizedDescription": "Private beta channel for iOS Next. Uses the same bundle identifier as Stable and replaces the installed Stable app when activated.",
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
@@ -16,7 +16,7 @@
           "buildVersion": "14",
           "date": "2026-09-21T12:32:13Z",
           "localizedDescription": "iOS Next 1.0.10 Beta (Build 14) — automatische Home-Assistant-Identität für Chat-Credentials, serverseitige Owner/Member-Trennung, Device-Binding und Legacy-Fallback; plus Motion V2, Control Center V2, Jarvis, Suche und Reconnect-Verbesserungen.",
-          "downloadURL": "https://github.com/nicofroeba16-cell/iOS-App-Release-/releases/download/v1.0.10-beta.14/IOSNext-Beta.ipa",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.0.10-beta.14/IOSNext-Beta.ipa",
           "size": 5635952,
           "minOSVersion": "27.0"
         }
