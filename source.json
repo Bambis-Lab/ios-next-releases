@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.1.0",
+          "date": "2026-09-29T20:07:29Z",
+          "localizedDescription": "- Motion V2 ist vollständig auf die kanonische Dark-Mode-Baseline mit 223 Frames umgestellt.\n- Die App erzwingt Dark Mode zur Laufzeit.\n- Fire-TV-Companion erhält capability-gesteuerte D-Pad-Navigation mit Hoch, Runter, Links, Rechts und OK sowie Back, Home, Menü und Recents, soweit unterstützt.\n- Home-Assistant-Raumzuordnung nutzt eine zentrale Entity-zu-Device-zu-Area-Normalisierung; Geräte werden über device_id dedupliziert.\n- Ungültige Zustände wie unavailable, unknown, none und leere Werte werden ohne irreführende Einheiten dargestellt.\n- Commander/MCP zeigt ausschließlich sanitisierten read-only Arbeitskontext für Repository, Branch, Workflow, Job, Phase, Step, Runner, letzte/nächste Aktivität und Laufzeit; keine erfundenen Prozentwerte.\n- Der finale Release-Gate verwendet die bereits akzeptierte Dark-Mode-Motion-Baseline; für diesen Release wurde kein Motion-Capture erneut ausgeführt.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.0/IOSNext-Free-unsigned.ipa",
+          "size": 5834167,
+          "minOSVersion": "27.0",
+          "buildVersion": "13"
+        },
+        {
           "version": "1.0.10",
           "date": "2026-09-23T20:02:13Z",
           "localizedDescription": "- Motion V2 ersetzt die bisherige Start- und Control-Center-Animation durch kurze, deterministische 120-Hz-Abläufe inklusive weichem Sperren ohne leere Zwischenframes.\n- Control Center V2 reduziert doppelte Statusanzeigen, bündelt Aktivität und hält Runner, Commander, Owner, Tickets, Projekte und Betriebsfunktionen vollständig erreichbar.\n- Der Control-Center-Hintergrund bleibt bei Navigation ortsfest; Detailseiten bewegen nur ihren Inhalt.\n- Projekt-Repositories werden über eine kanonische Registry dargestellt; veraltete iOS-App-Zuordnungen werden automatisch auf `nicofroeba16-cell/iOS-App` korrigiert.\n- Jarvis erhält eine lokale Wake-Word-Foundation mit dem Wake Word „Jarvis“, On-Device-Spracherkennung, Empfindlichkeitsstufen und sicherem Intent-Routing ohne automatische Owner-Aktionen.\n- Wake Listening endet automatisch, sobald iOS Next den Vordergrund verlässt; es gibt keinen automatischen Wake-Word-Server-Fallback.\n- Neue globale Suche für Räume, Etagen und Home-Assistant-Entitäten sowie ein read-only Berechtigungscenter unter System.\n- Kurze Verbindungsunterbrechungen bleiben unter einer Sekunde unsichtbar; bestehende Daten bleiben während des Reconnects nutzbar.\n- Wiederholte Owner-Ereignisse werden in Meldungen gruppiert statt als identische Einzelzeilen dargestellt.\n- Die festgelegten Start- und Nico-Zimmer-Layouts sowie deren vorhandene Funktionen bleiben unverändert erhalten.",

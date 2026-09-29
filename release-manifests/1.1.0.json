@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "app": "iOS Next",
+  "version": "1.1.0",
+  "build_version": "13",
+  "bundle_identifier": "de.nicofroeba16.iosnext",
+  "min_os_version": "27.0",
+  "approved_source_commit": "5f5925037a5cfce280fec49960e5a1cd2c3ed8f9",
+  "build_source_commit": "483162fe33861b0114cd7005a1d6b6d5a189bd42",
+  "build_workflow_run": "36623549335",
+  "expected_artifact": "IOSNext-Free-unsigned.ipa",
+  "release_tag": "v1.1.0",
+  "release_asset_name": "IOSNext-Free-unsigned.ipa",
+  "download_url": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.0/IOSNext-Free-unsigned.ipa",
+  "release_notes": "release-notes/1.1.0.md",
+  "status": "published",
+  "ipa_size_bytes": 5834167,
+  "ipa_sha256": "b7e128e434fda457ade84ecf4cd8a2da691066c4b681c29979aca02b9cce9d20",
+  "release_date": "2026-09-29T20:07:29Z"
+}
