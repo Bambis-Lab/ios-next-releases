@@ -1,0 +1,111 @@
+name: iOS Next — Publish 1.1.0 One Shot
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event.issue.title == 'IOSNEXT-PUBLISH-1.1.0-20260929'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+
+      - name: Download approved IPA artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh run download 36623549335 -n IOSNext-Free-unsigned-IPA -D dist
+          test -s dist/IOSNext-Free-unsigned.ipa
+          cd dist
+          shasum -a 256 -c IOSNext-Free-unsigned.ipa.sha256
+
+      - name: Prepare canonical release notes
+        run: |
+          set -euo pipefail
+          cat > release-notes/1.1.0.md <<'EOF'
+          # iOS Next 1.1.0
+
+          - Motion V2 ist vollständig auf die kanonische Dark-Mode-Baseline mit 223 Frames umgestellt.
+          - Die App erzwingt Dark Mode zur Laufzeit.
+          - Fire-TV-Companion erhält capability-gesteuerte D-Pad-Navigation mit Hoch, Runter, Links, Rechts und OK sowie Back, Home, Menü und Recents, soweit unterstützt.
+          - Home-Assistant-Raumzuordnung nutzt eine zentrale Entity-zu-Device-zu-Area-Normalisierung; Geräte werden über device_id dedupliziert.
+          - Ungültige Zustände wie unavailable, unknown, none und leere Werte werden ohne irreführende Einheiten dargestellt.
+          - Commander/MCP zeigt ausschließlich sanitisierten read-only Arbeitskontext für Repository, Branch, Workflow, Job, Phase, Step, Runner, letzte/nächste Aktivität und Laufzeit; keine erfundenen Prozentwerte.
+          - Der finale Release-Gate verwendet die bereits akzeptierte Dark-Mode-Motion-Baseline; für diesen Release wurde kein Motion-Capture erneut ausgeführt.
+          EOF
+
+      - name: Publish GitHub Release and SideStore feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=1.1.0
+          BUILD=13
+          TAG=v1.1.0
+          ASSET=IOSNext-Free-unsigned.ipa
+          IPA=dist/$ASSET
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing duplicate."
+            exit 1
+          fi
+
+          gh release create "$TAG" "$IPA#$ASSET" \
+            --title "iOS Next 1.1.0" \
+            --notes-file release-notes/1.1.0.md \
+            --target main
+
+          PUBLISHED_AT="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq .published_at)"
+          SIZE="$(wc -c < "$IPA" | tr -d ' ')"
+          SHA256="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$ASSET"
+
+          python3 scripts/publish_version.py \
+            --version "$VERSION" \
+            --build-version "$BUILD" \
+            --date "$PUBLISHED_AT" \
+            --download-url "$DOWNLOAD_URL" \
+            --size "$SIZE" \
+            --min-os-version 27.0
+
+          cat > "release-manifests/$VERSION.json" <<EOF
+          {
+            "schema_version": 1,
+            "app": "iOS Next",
+            "version": "$VERSION",
+            "build_version": "$BUILD",
+            "bundle_identifier": "de.nicofroeba16.iosnext",
+            "min_os_version": "27.0",
+            "approved_source_commit": "5f5925037a5cfce280fec49960e5a1cd2c3ed8f9",
+            "build_source_commit": "483162fe33861b0114cd7005a1d6b6d5a189bd42",
+            "build_workflow_run": "36623549335",
+            "expected_artifact": "$ASSET",
+            "release_tag": "$TAG",
+            "release_asset_name": "$ASSET",
+            "download_url": "$DOWNLOAD_URL",
+            "release_notes": "release-notes/$VERSION.md",
+            "status": "published",
+            "ipa_size_bytes": $SIZE,
+            "ipa_sha256": "$SHA256",
+            "release_date": "$PUBLISHED_AT"
+          }
+          EOF
+
+          python3 -m json.tool source.json >/dev/null
+          python3 -m json.tool "release-manifests/$VERSION.json" >/dev/null
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source.json release-notes/1.1.0.md release-manifests/1.1.0.json
+          git commit -m "release: publish iOS Next 1.1.0 build 13 [skip ci]"
+          git push origin main
