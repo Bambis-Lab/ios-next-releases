@@ -1,0 +1,80 @@
+name: iOS Next — Xcode 27 IPA One Shot
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event.issue.title == 'IOSNEXT-XCODE27-IPA-ONE-SHOT-20260929'
+    runs-on: xcode-27-arm64
+
+    steps:
+      - name: Checkout prepared source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: build/ios-next-1.1.0-xcode27
+
+      - name: Verify Xcode 27
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcodebuild -version | grep -q 'Xcode 27'
+
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
+          xcodegen --version
+
+      - name: Generate app-only project
+        working-directory: build-source
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec project.public.yml
+
+      - name: Build unsigned ARM64 Release app
+        working-directory: build-source
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/IOSNextDerived"
+          xcodebuild -project IOSNext.xcodeproj -scheme IOSNext -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/IOSNextDerived" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Validate application
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/IOSNextDerived/Build/Products/Release-iphoneos/IOSNext.app"
+          PLIST="$APP/Info.plist"
+          test -d "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "de.nicofroeba16.iosnext"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "1.1.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "13"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIUserInterfaceStyle' "$PLIST")" = "Dark"
+          file "$APP/IOSNext" | grep -q arm64
+          ! find "$APP" -type d -name '*.appex' | grep -q .
+          echo "APP_VALIDATION=PASS"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/IOSNextDerived/Build/Products/Release-iphoneos/IOSNext.app"
+          OUT="$RUNNER_TEMP/ipa"
+          mkdir -p "$OUT/Payload"
+          cp -R "$APP" "$OUT/Payload/"
+          cd "$OUT"
+          ditto -c -k --sequesterRsrc --keepParent Payload IOSNext-Free-unsigned.ipa
+          test -s IOSNext-Free-unsigned.ipa
+          shasum -a 256 IOSNext-Free-unsigned.ipa > IOSNext-Free-unsigned.ipa.sha256
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOSNext-Free-unsigned-IPA
+          path: |
+            ${{ runner.temp }}/ipa/IOSNext-Free-unsigned.ipa
+            ${{ runner.temp }}/ipa/IOSNext-Free-unsigned.ipa.sha256
+          if-no-files-found: error
