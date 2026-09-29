@@ -9,8 +9,8 @@ permissions:
 
 jobs:
   build:
-    if: github.event.issue.title == 'IOSNEXT-XCODE27-IPA-ONE-SHOT-20260929'
-    runs-on: xcode-27-arm64
+    if: github.event.issue.title == 'IOSNEXT-XCODE27-IPA-ONE-SHOT-20260929-V2'
+    runs-on: xcode-27
 
     steps:
       - name: Checkout prepared source
