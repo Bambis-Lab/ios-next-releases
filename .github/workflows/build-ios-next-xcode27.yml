@@ -2,12 +2,18 @@ name: iOS Next — Xcode 27 IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - build/ios-next-1.1.0-xcode27
+    paths:
+      - .github/workflows/build-ios-next-xcode27.yml
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'ci: trigger one-shot Xcode 27 IPA build'
     runs-on: xcode-27-arm64
 
     steps:
@@ -39,9 +45,7 @@ jobs:
         working-directory: build-source
         run: |
           set -euo pipefail
-
           rm -rf "$RUNNER_TEMP/IOSNextDerived"
-
           xcodebuild \
             -project IOSNext.xcodeproj \
             -scheme IOSNext \
@@ -59,49 +63,35 @@ jobs:
       - name: Validate application
         run: |
           set -euo pipefail
-
           APP="$RUNNER_TEMP/IOSNextDerived/Build/Products/Release-iphoneos/IOSNext.app"
           PLIST="$APP/Info.plist"
-
           test -d "$APP"
-
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")
           VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
           BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
           STYLE=$(/usr/libexec/PlistBuddy -c 'Print :UIUserInterfaceStyle' "$PLIST")
-
           test "$BUNDLE_ID" = "de.nicofroeba16.iosnext"
           test "$VERSION" = "1.1.0"
           test "$BUILD" = "13"
           test "$STYLE" = "Dark"
-
           file "$APP/IOSNext" | grep -q arm64
-
           if find "$APP" -type d -name '*.appex' | grep -q .; then
             echo "Unexpected app extension found"
             exit 1
           fi
-
           echo "APP_VALIDATION=PASS"
 
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
-
           APP="$RUNNER_TEMP/IOSNextDerived/Build/Products/Release-iphoneos/IOSNext.app"
           OUT="$RUNNER_TEMP/ipa"
-
           mkdir -p "$OUT/Payload"
           cp -R "$APP" "$OUT/Payload/"
-
           cd "$OUT"
-          ditto -c -k --sequesterRsrc --keepParent \
-            Payload \
-            IOSNext-Free-unsigned.ipa
-
+          ditto -c -k --sequesterRsrc --keepParent Payload IOSNext-Free-unsigned.ipa
           test -s IOSNext-Free-unsigned.ipa
-          shasum -a 256 IOSNext-Free-unsigned.ipa \
-            > IOSNext-Free-unsigned.ipa.sha256
+          shasum -a 256 IOSNext-Free-unsigned.ipa > IOSNext-Free-unsigned.ipa.sha256
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
