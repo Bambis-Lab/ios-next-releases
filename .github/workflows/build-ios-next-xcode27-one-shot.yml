@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    if: github.event.issue.title == 'IOSNEXT-XCODE27-IPA-ONE-SHOT-20260929-V2'
+    if: github.event.issue.title == 'IOSNEXT-XCODE27-IPA-ONE-SHOT-20260929-V3'
     runs-on: xcode-27
 
     steps:
@@ -21,9 +21,13 @@ jobs:
       - name: Verify Xcode 27
         run: |
           set -euo pipefail
-          xcodebuild -version
+          XCODE_VERSION="$(xcodebuild -version)"
+          printf '%s\n' "$XCODE_VERSION"
           xcrun --sdk iphoneos --show-sdk-version
-          xcodebuild -version | grep -q 'Xcode 27'
+          case "$XCODE_VERSION" in
+            *"Xcode 27"*) ;;
+            *) echo "Expected Xcode 27"; exit 1 ;;
+          esac
 
       - name: Install XcodeGen
         run: |
