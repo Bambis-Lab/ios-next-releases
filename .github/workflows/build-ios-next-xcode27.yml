@@ -13,7 +13,8 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'ci: trigger one-shot Xcode 27 IPA build'
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'ci: trigger one-shot Xcode 27 IPA build v2'
     runs-on: xcode-27-arm64
 
     steps:
