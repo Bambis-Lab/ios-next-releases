@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "prepared",
+  "app": "iOS Next",
+  "version": "1.1.2",
+  "build_version": "15",
+  "bundle_identifier": "de.nicofroeba16.iosnext",
+  "min_os_version": "27.0",
+  "source_repository": "Bambis-Lab/ios-next",
+  "source_branch": "fix/1.1.2-runtime-firetv",
+  "source_commit": "c24135afe2f0e98a7c1549cdfd8eafa9decc409d",
+  "build_repository": "Bambis-Lab/ios-next-releases",
+  "build_branch": "build/ios-next-1.1.2-xcode27",
+  "build_source_commit": "37021960d6433008a1099430c731802dac49ea14",
+  "release_tag": "v1.1.2",
+  "asset": "IOSNext-Free-unsigned.ipa",
+  "publish_gate": "all-tests-and-ipa-validation-must-pass",
+  "rollback": {
+    "version": "1.1.1",
+    "build_version": "14",
+    "release_tag": "v1.1.1",
+    "asset": "IOSNext-Free-unsigned.ipa",
+    "feed_action": "restore 1.1.1 as first source.json version entry"
+  },
+  "planned_tests": {
+    "architecture_regression": true,
+    "release_112_regression": true,
+    "functional_smoke": true,
+    "fire_tv_system_service_filter": true,
+    "master_runtime_adapter": true,
+    "master_live_inherits_runner_configuration": true,
+    "arm64_release_build": true,
+    "ipa_validation": true
+  }
+}
