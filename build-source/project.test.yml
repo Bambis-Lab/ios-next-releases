@@ -35,6 +35,9 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: iOS Next uses the microphone for voice messages and the locally enabled Jarvis voice mode.
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: iOS Next uses on-device iOS speech recognition for the Jarvis wake word and subsequent voice commands when local recognition is available.
         INFOPLIST_KEY_NSCameraUsageDescription: iOS Next uses the camera for photos encrypted directly from memory.
+    scheme:
+      testTargets:
+        - IOSNextTests
   IOSNextTests:
     type: bundle.unit-test
     platform: iOS
@@ -46,6 +49,3 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: de.nicofroeba16.iosnext.tests
-    scheme:
-      testTargets:
-        - IOSNextTests
