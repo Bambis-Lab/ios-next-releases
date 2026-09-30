@@ -16,12 +16,12 @@ enum LiveOperationsError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidConfiguration: "Die Live-Operations-Adresse oder das Token ist ungültig."
-        case .missingCredential: "Für Live Operations ist kein read-only Token eingerichtet."
-        case .invalidURL: "Die Live-Operations-Adresse ist ungültig."
-        case .disconnected: "Die Live-Operations-Verbindung wurde getrennt."
-        case .timedOut: "Die Live-Operations-Verbindung antwortet nicht."
-        case .invalidMessage: "Der Live-Operations-Dienst hat ungültige Daten gesendet."
+        case .invalidConfiguration: "Die Master-Runtime-Verbindung ist ungültig."
+        case .missingCredential: "Für Master Runtime Live ist kein Runner-Live-Token verfügbar."
+        case .invalidURL: "Die Master-Runtime-Adresse ist ungültig."
+        case .disconnected: "Die Master-Runtime-Verbindung wurde getrennt."
+        case .timedOut: "Die Master Runtime antwortet nicht."
+        case .invalidMessage: "Die Master Runtime hat ungültige Daten gesendet."
         }
     }
 }
@@ -198,22 +198,41 @@ final class LiveOperationsModel {
     private let client = LiveOperationsClient()
     private var streamTask: Task<Void, Never>?
     private var configuration: LiveOperationsConfiguration?
-    private let endpointKey = "liveOperationsEndpoint"
-    private let tokenAccount = "liveOperationsReadOnlyToken"
+    private let runnerEndpointKey = "runnerControlEndpoint"
+    private let runnerLiveTokenAccount = "runnerLiveToken"
 
     init() {
-        restoreConfiguration()
+        refreshRuntimeConfiguration()
     }
 
+    var isConfigured: Bool { configuration != nil }
+
     var activeOperations: [LiveOperation] {
-        let combined = Array(mcpState.activeOperations.values) + Array(sentinelXState.activeOperations.values)
-        return combined.sorted { $0.startedAt < $1.startedAt }
+        Array(mcpState.activeOperations.values).sorted { $0.startedAt < $1.startedAt }
     }
 
     var recentOperations: [LiveOperation] {
-        Array((mcpState.recentOperations + sentinelXState.recentOperations)
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .prefix(50))
+        Array(mcpState.recentOperations.sorted { $0.updatedAt > $1.updatedAt }.prefix(50))
+    }
+
+    func refreshRuntimeConfiguration() {
+        guard let endpoint = UserDefaults.standard.string(forKey: runnerEndpointKey),
+              let url = URL(string: endpoint),
+              isAllowedScheme(url.scheme),
+              let token = try? KeychainStore.value(account: runnerLiveTokenAccount),
+              !token.isEmpty else {
+            if configuration != nil { stop(reset: false) }
+            configuration = nil
+            connectionState = .unconfigured
+            return
+        }
+
+        let next = LiveOperationsConfiguration(baseURL: url, token: token)
+        guard configuration != next else { return }
+        stop(reset: false)
+        configuration = next
+        connectionState = .offline
+        lastError = nil
     }
 
     func configure(endpoint: String, token: String) throws {
@@ -222,8 +241,6 @@ final class LiveOperationsModel {
             throw LiveOperationsError.invalidConfiguration
         }
         configuration = LiveOperationsConfiguration(baseURL: url, token: token)
-        UserDefaults.standard.set(url.absoluteString, forKey: endpointKey)
-        try KeychainStore.save(token, account: tokenAccount)
         connectionState = .offline
         isPresentingConfiguration = false
         startIfNeeded()
@@ -232,12 +249,12 @@ final class LiveOperationsModel {
     func removeConfiguration() {
         stop(reset: true)
         configuration = nil
-        UserDefaults.standard.removeObject(forKey: endpointKey)
-        KeychainStore.delete(account: tokenAccount)
         connectionState = .unconfigured
+        isPresentingConfiguration = false
     }
 
     func startIfNeeded() {
+        refreshRuntimeConfiguration()
         guard streamTask == nil, configuration != nil else { return }
         streamTask = Task { [weak self] in await self?.runLoop() }
     }
@@ -263,16 +280,13 @@ final class LiveOperationsModel {
                 let stream = try await client.stream(
                     configuration: configuration,
                     lastMCPSequence: mcpState.needsFullResync ? nil : mcpState.lastSequence,
-                    lastSentinelSequence: sentinelXState.needsFullResync ? nil : sentinelXState.lastSequence
+                    lastSentinelSequence: nil
                 )
                 connectionState = .syncing
                 for try await event in stream {
                     if Task.isCancelled { return }
-                    let result: LiveOperationsApplyResult
-                    switch event.source {
-                    case .mcp: result = mcpState.apply(event)
-                    case .sentinelX: result = sentinelXState.apply(event)
-                    }
+                    guard event.source == .mcp else { continue }
+                    let result = mcpState.apply(event)
                     if result == .resyncRequired {
                         connectionState = .degraded
                         break
@@ -292,15 +306,6 @@ final class LiveOperationsModel {
                 try? await Task.sleep(for: .seconds(delay))
             }
         }
-    }
-
-    private func restoreConfiguration() {
-        guard let endpoint = UserDefaults.standard.string(forKey: endpointKey),
-              let url = URL(string: endpoint),
-              let token = try? KeychainStore.value(account: tokenAccount),
-              !token.isEmpty else { return }
-        configuration = LiveOperationsConfiguration(baseURL: url, token: token)
-        connectionState = .offline
     }
 
     private func isAllowedScheme(_ scheme: String?) -> Bool {
