@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.1.1",
+          "date": "2026-09-30T12:43:46Z",
+          "localizedDescription": "Performance- und Architektur-Fix: indizierte HA-Raumauflösung, persistente Navigation, gemeinsame Runtime, Master Runtime UI, konsistenter Chat/Relay-Health sowie Projekt/Job/CI-Snapshots. Architektur-Regressionssuite und funktionaler Smoke-Gate vor Release bestanden.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.1/IOSNext-Free-unsigned.ipa",
+          "size": 5847768,
+          "minOSVersion": "27.0",
+          "buildVersion": "14"
+        },
+        {
           "version": "1.1.0",
           "date": "2026-09-29T20:07:29Z",
           "localizedDescription": "- Motion V2 ist vollständig auf die kanonische Dark-Mode-Baseline mit 223 Frames umgestellt.\n- Die App erzwingt Dark Mode zur Laufzeit.\n- Fire-TV-Companion erhält capability-gesteuerte D-Pad-Navigation mit Hoch, Runter, Links, Rechts und OK sowie Back, Home, Menü und Recents, soweit unterstützt.\n- Home-Assistant-Raumzuordnung nutzt eine zentrale Entity-zu-Device-zu-Area-Normalisierung; Geräte werden über device_id dedupliziert.\n- Ungültige Zustände wie unavailable, unknown, none und leere Werte werden ohne irreführende Einheiten dargestellt.\n- Commander/MCP zeigt ausschließlich sanitisierten read-only Arbeitskontext für Repository, Branch, Workflow, Job, Phase, Step, Runner, letzte/nächste Aktivität und Laufzeit; keine erfundenen Prozentwerte.\n- Der finale Release-Gate verwendet die bereits akzeptierte Dark-Mode-Motion-Baseline; für diesen Release wurde kein Motion-Capture erneut ausgeführt.",
