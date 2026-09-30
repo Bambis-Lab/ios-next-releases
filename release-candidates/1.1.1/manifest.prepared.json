@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "status": "prepared",
+  "app": "iOS Next",
+  "bundle_identifier": "de.nicofroeba16.iosnext",
+  "version": "1.1.1",
+  "build_version": "14",
+  "min_os_version": "27.0",
+  "source_repository": "Bambis-Lab/ios-next",
+  "source_branch": "fix/architecture-p1-p5",
+  "source_commit": "9d72245a1005c7b26ab0488cb488b803afe5390b",
+  "expected_artifact": "IOSNext-Free-unsigned.ipa",
+  "expected_architecture": "arm64",
+  "motion_capture_required": false,
+  "accepted_motion_baseline_frames": 223,
+  "ipa_size": null,
+  "ipa_sha256": null,
+  "release_tag": "v1.1.1",
+  "published_at": null,
+  "rollback": {
+    "version": "1.1.0",
+    "build_version": "13",
+    "release_tag": "v1.1.0",
+    "asset": "IOSNext-Free-unsigned.ipa",
+    "download_url": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.0/IOSNext-Free-unsigned.ipa"
+  }
+}
