@@ -1,0 +1,13 @@
+{
+  "rollback_target": {
+    "version": "1.1.0",
+    "buildVersion": "13",
+    "date": "2026-09-29T20:07:29Z",
+    "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.0/IOSNext-Free-unsigned.ipa",
+    "size": 5834167,
+    "minOSVersion": "27.0"
+  },
+  "feed": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/source.json",
+  "strategy": "If 1.1.1 must be withdrawn, restore 1.1.0 Build 13 as the newest offered SideStore version without rebuilding or replacing the 1.1.0 asset.",
+  "do_not_overwrite_build_14": true
+}
