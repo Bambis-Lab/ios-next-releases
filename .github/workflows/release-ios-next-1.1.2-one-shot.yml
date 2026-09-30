@@ -1,0 +1,257 @@
+name: iOS Next 1.1.2 Build 15 — Test Build Release
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: ios-next-1.1.2-release-one-shot
+  cancel-in-progress: false
+
+jobs:
+  test-build-release:
+    if: github.event.issue.title == 'IOSNEXT-1.1.2-B15-RELEASE-20260930'
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_REF: build/ios-next-1.1.2-xcode27
+      EXPECTED_BUNDLE_ID: de.nicofroeba16.iosnext
+      EXPECTED_VERSION: 1.1.2
+      EXPECTED_BUILD: '15'
+      RELEASE_TAG: v1.1.2
+    steps:
+      - name: Checkout exact release candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.BUILD_REF }}
+          fetch-depth: 1
+
+      - name: Verify Xcode 27 and 1.1.2 source gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(xcodebuild -version)"
+          printf '%s\n' "$XCODE_VERSION"
+          case "$XCODE_VERSION" in *"Xcode 27"*) ;; *) echo 'Expected Xcode 27'; exit 1;; esac
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          test -f build-source/Sources/Core/HomeAssistantLookupIndex.swift
+          test -f build-source/Sources/Core/MasterRuntimeSnapshot.swift
+          test -f build-source/Sources/Core/FireTVPresentationPolicy.swift
+          test -f build-source/Sources/Design/FireTVCompanionPresentationV2.swift
+          test -f build-source/Tests/Release112RegressionTests.swift
+          grep -q 'IOS27FireTVCompanionCardV2' build-source/Sources/Features/MediaView.swift
+          grep -qi 'buellerdeviceservice' build-source/Sources/Core/FireTVPresentationPolicy.swift
+          grep -q 'version = nil' build-source/Sources/Core/MasterRuntimeSnapshot.swift
+          grep -q 'runnerControlEndpoint' build-source/Sources/Core/LiveOperationsClient.swift
+          grep -q 'runnerLiveToken' build-source/Sources/Core/LiveOperationsClient.swift
+          ! grep -q 'liveOperationsEndpoint' build-source/Sources/Core/LiveOperationsClient.swift
+          ! grep -q 'liveOperationsReadOnlyToken' build-source/Sources/Core/LiveOperationsClient.swift
+          ! grep -q 'Read-only Live-Token' build-source/Sources/Features/LiveOperationsView.swift
+          ! grep -q 'live-relay.example' build-source/Sources/Features/LiveOperationsView.swift
+          grep -q 'MARKETING_VERSION: 1.1.2' build-source/project.public.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 15' build-source/project.public.yml
+          echo SOURCE_GATE=PASS
+
+      - name: Install XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          xcodegen --version
+
+      - name: Generate regression-test project
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf IOSNext.xcodeproj
+          xcodegen generate --spec project.test.yml
+          xcodebuild -project IOSNext.xcodeproj -scheme IOSNext -showdestinations
+
+      - name: Run architecture and 1.1.2 regression tests
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/IOSNextTestDerived"
+          xcodebuild test \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+            -derivedDataPath "$RUNNER_TEMP/IOSNextTestDerived" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            | tee "$RUNNER_TEMP/regression-tests.log"
+          grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/regression-tests.log"
+          echo ARCHITECTURE_REGRESSION=PASS
+          echo RELEASE_112_REGRESSION=PASS
+
+      - name: Functional 1.1.2 smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'HomeAssistantLookupIndexCache.shared.index' build-source/Sources/Core/HomeAssistantLookupIndex.swift
+          grep -q 'visibleForegroundApp' build-source/Sources/Design/FireTVCompanionPresentationV2.swift
+          grep -q 'shouldShowNowPlaying' build-source/Sources/Design/FireTVCompanionPresentationV2.swift
+          grep -q 'MasterRuntimeSnapshot' build-source/Sources/Features/CommanderLiveDetailView.swift
+          ! grep -q 'snapshot.version' build-source/Sources/Features/CommanderLiveDetailView.swift
+          ! grep -q 'Konfigurieren' build-source/Sources/Features/LiveOperationsView.swift
+          grep -q 'refreshRuntimeConfiguration' build-source/Sources/Features/LiveOperationsView.swift
+          grep -q 'guard event.source == .mcp' build-source/Sources/Core/LiveOperationsClient.swift
+          echo FUNCTIONAL_SMOKE=PASS
+
+      - name: Generate app-only release project
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf IOSNext.xcodeproj
+          xcodegen generate --spec project.public.yml
+
+      - name: Build unsigned ARM64 Release app
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/IOSNextDerived"
+          xcodebuild build \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/IOSNextDerived" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Validate and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/IOSNextDerived/Build/Products/Release-iphoneos/IOSNext.app"
+          PLIST="$APP/Info.plist"
+          test -d "$APP"
+          test -x "$APP/IOSNext"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "$EXPECTED_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$EXPECTED_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$EXPECTED_BUILD"
+          file "$APP/IOSNext" | grep -q arm64
+          ! find "$APP" -type d -name '*.appex' | grep -q .
+          OUT="$RUNNER_TEMP/ipa"
+          rm -rf "$OUT" && mkdir -p "$OUT/Payload"
+          cp -R "$APP" "$OUT/Payload/"
+          (cd "$OUT" && ditto -c -k --sequesterRsrc --keepParent Payload IOSNext-Free-unsigned.ipa)
+          test -s "$OUT/IOSNext-Free-unsigned.ipa"
+          unzip -t "$OUT/IOSNext-Free-unsigned.ipa"
+          shasum -a 256 "$OUT/IOSNext-Free-unsigned.ipa" | tee "$OUT/IOSNext-Free-unsigned.ipa.sha256"
+          stat -f '%z' "$OUT/IOSNext-Free-unsigned.ipa" | tee "$OUT/IOSNext-Free-unsigned.ipa.size"
+          echo APP_VALIDATION=PASS
+
+      - name: Upload validated IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOSNext-1.1.2-B15-Free-unsigned-IPA
+          path: |
+            ${{ runner.temp }}/ipa/IOSNext-Free-unsigned.ipa
+            ${{ runner.temp }}/ipa/IOSNext-Free-unsigned.ipa.sha256
+            ${{ runner.temp }}/ipa/IOSNext-Free-unsigned.ipa.size
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET="$RUNNER_TEMP/ipa/IOSNext-Free-unsigned.ipa"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing silent overwrite"
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          iOS Next 1.1.2 (Build 15)
+
+          - Master Runtime UI now consumes a dedicated MasterRuntimeSnapshot; legacy Commander versions are no longer exposed as the Master Runtime version.
+          - Master Runtime Live inherits the existing Runner/Master endpoint and live credential instead of asking for a second endpoint/token setup.
+          - Fire TV Companion V2 filters system services such as BuellerDeviceService from foreground-app and app-launch presentation.
+          - Fire TV off/standby states suppress false now-playing and transport controls while preserving Wake.
+          - Home Assistant topology lookup index is cached and only rebuilt when device/registry topology changes.
+          - Dedicated 1.1.2 regression tests cover Fire TV filtering/state semantics and Master Runtime legacy-version isolation.
+          EOF
+          gh release create "$RELEASE_TAG" "$ASSET#IOSNext-Free-unsigned.ipa" --title "iOS Next 1.1.2" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish SideStore feed and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B publish-1.1.2 origin/main
+          IPA="$RUNNER_TEMP/ipa/IOSNext-Free-unsigned.ipa"
+          SIZE="$(stat -f '%z' "$IPA")"
+          SHA="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export SIZE SHA DATE
+          mkdir -p release-notes release-manifests
+          cp "$RUNNER_TEMP/release-notes.md" release-notes/1.1.2.md
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('source.json')
+          data=json.loads(p.read_text())
+          app=data['apps'][0]
+          versions=app['versions']
+          if any(v.get('version')=='1.1.2' for v in versions):
+              raise SystemExit('1.1.2 already present; refusing duplicate')
+          versions.insert(0, {
+              'version':'1.1.2',
+              'date':os.environ['DATE'],
+              'localizedDescription':'Master Runtime native presentation, inherited Master Live configuration, Fire TV system-service filtering/state consistency, and cached Home Assistant topology lookups.',
+              'downloadURL':'https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.1.2/IOSNext-Free-unsigned.ipa',
+              'size':int(os.environ['SIZE']),
+              'minOSVersion':'27.0',
+              'buildVersion':'15'
+          })
+          p.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n')
+          manifest={
+            'schema_version':1,
+            'status':'published',
+            'app':'iOS Next',
+            'version':'1.1.2',
+            'build_version':'15',
+            'bundle_identifier':'de.nicofroeba16.iosnext',
+            'min_os_version':'27.0',
+            'source_repository':'Bambis-Lab/ios-next',
+            'source_branch':'fix/1.1.2-runtime-firetv',
+            'source_commit':'c24135afe2f0e98a7c1549cdfd8eafa9decc409d',
+            'build_source_commit':'37021960d6433008a1099430c731802dac49ea14',
+            'release_tag':'v1.1.2',
+            'asset':'IOSNext-Free-unsigned.ipa',
+            'ipa_size':int(os.environ['SIZE']),
+            'ipa_sha256':os.environ['SHA'],
+            'published_at':os.environ['DATE'],
+            'tests':{'architecture_regression':'pass','release_112_regression':'pass','functional_smoke':'pass'},
+            'rollback':{'version':'1.1.1','build_version':'14','release_tag':'v1.1.1','asset':'IOSNext-Free-unsigned.ipa'}
+          }
+          Path('release-manifests/1.1.2.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source.json release-notes/1.1.2.md release-manifests/1.1.2.json
+          git commit -m 'release: publish iOS Next 1.1.2 build 15 [skip ci]'
+          git push origin HEAD:main
+
+      - name: Verify published SideStore state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.1.2 --json tagName,isDraft,isPrerelease,assets
+          git fetch origin main
+          git show origin/main:source.json | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d["apps"][0]["versions"][0]; assert v["version"]=="1.1.2" and v["buildVersion"]=="15"; print("SIDESTORE_VERIFY=PASS")'
