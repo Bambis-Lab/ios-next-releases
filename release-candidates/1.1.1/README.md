@@ -4,7 +4,7 @@ Status: PREPARED / NOT PUBLISHED
 
 Source repository: Bambis-Lab/ios-next
 Source branch: fix/architecture-p1-p5
-Source commit: 9d72245a1005c7b26ab0488cb488b803afe5390b
+Source commit: 85f25e82b9e550c1dc610678a8ed2f49771c86b9
 Bundle ID: de.nicofroeba16.iosnext
 Version: 1.1.1
 Build: 14
