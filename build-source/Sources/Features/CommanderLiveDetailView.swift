@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct CommanderLiveSummaryCard: View {
+struct MasterRuntimeSummaryCard: View {
     let state: CommanderLiveViewState
 
     var body: some View {
@@ -11,7 +11,7 @@ struct CommanderLiveSummaryCard: View {
                     .fill(statusColor(snapshot?.state))
                     .frame(width: 10, height: 10)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Code Commander")
+                    Text("Master Runtime")
                         .font(.headline)
                     Text(statusTitle(snapshot?.state))
                         .font(.subheadline.weight(.semibold))
@@ -70,7 +70,7 @@ struct CommanderLiveSummaryCard: View {
     }
 }
 
-struct CommanderLiveDetailView: View {
+struct MasterRuntimeDetailView: View {
     let model: RunnerControlModel
 
     var body: some View {
@@ -78,9 +78,9 @@ struct CommanderLiveDetailView: View {
             if let snapshot = model.commanderLiveState.effectiveSnapshot {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        CommanderLiveSummaryCard(state: model.commanderLiveState)
+                        MasterRuntimeSummaryCard(state: model.commanderLiveState)
 
-                        IOS27SectionHeader(title: "Live", subtitle: "Sanitisierte Echtzeitdaten")
+                        IOS27SectionHeader(title: "Live", subtitle: "Sanitisierte Master-Runtime-Telemetrie")
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 12)], spacing: 12) {
                             IOS27StatusCard(
                                 title: "Vorgänge",
@@ -89,44 +89,19 @@ struct CommanderLiveDetailView: View {
                                 tint: snapshot.activeCount > 0 ? .green : .blue
                             )
                             if let sessions = snapshot.activeSessions {
-                                IOS27StatusCard(
-                                    title: "Sessions",
-                                    value: "\(sessions)",
-                                    symbol: "terminal.fill",
-                                    tint: .blue
-                                )
+                                IOS27StatusCard(title: "Sessions", value: "\(sessions)", symbol: "terminal.fill", tint: .blue)
                             }
                             if let searches = snapshot.activeSearches {
-                                IOS27StatusCard(
-                                    title: "Searches",
-                                    value: "\(searches)",
-                                    symbol: "magnifyingglass.circle.fill",
-                                    tint: .cyan
-                                )
+                                IOS27StatusCard(title: "Searches", value: "\(searches)", symbol: "magnifyingglass.circle.fill", tint: .cyan)
                             }
                             if let uptime = snapshot.uptimeSeconds {
-                                IOS27StatusCard(
-                                    title: "Uptime",
-                                    value: formatUptime(uptime),
-                                    symbol: "clock.arrow.circlepath",
-                                    tint: .purple
-                                )
+                                IOS27StatusCard(title: "Uptime", value: formatUptime(uptime), symbol: "clock.arrow.circlepath", tint: .purple)
                             }
                             if let cpu = snapshot.cpuPercent {
-                                IOS27StatusCard(
-                                    title: "CPU",
-                                    value: "\(Int(cpu.rounded())) %",
-                                    symbol: "cpu.fill",
-                                    tint: cpu >= 85 ? .red : .blue
-                                )
+                                IOS27StatusCard(title: "CPU", value: "\(Int(cpu.rounded())) %", symbol: "cpu.fill", tint: cpu >= 85 ? .red : .blue)
                             }
                             if let memory = snapshot.memoryPercent {
-                                IOS27StatusCard(
-                                    title: "RAM",
-                                    value: "\(Int(memory.rounded())) %",
-                                    symbol: "memorychip.fill",
-                                    tint: memory >= 85 ? .red : .purple
-                                )
+                                IOS27StatusCard(title: "RAM", value: "\(Int(memory.rounded())) %", symbol: "memorychip.fill", tint: memory >= 85 ? .red : .purple)
                             }
                         }
 
@@ -154,7 +129,7 @@ struct CommanderLiveDetailView: View {
                         }
 
                         IOS27SectionHeader(title: "Sicherheit")
-                        Text("Live werden ausschließlich Toolname, Zeit, Dauer und Statusmetadaten übertragen. Pfade, Befehle, Argumente, Ausgaben, Tokens und Dateiinhalte bleiben außerhalb der App.")
+                        Text("Der bisherige Telemetrievertrag bleibt vorübergehend nur als interner Kompatibilitätsadapter bestehen. Angezeigt wird ausschließlich die iOS-Next-Master-Runtime. Pfade, Befehle, Argumente, Ausgaben, Tokens und Dateiinhalte bleiben außerhalb der App.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(14)
@@ -166,14 +141,14 @@ struct CommanderLiveDetailView: View {
                 .ios27ScrollBottomClearance()
             } else {
                 ContentUnavailableView {
-                    Label("Kein Commander-Status", systemImage: "terminal")
+                    Label("Kein Master-Runtime-Status", systemImage: "server.rack")
                 } description: {
-                    Text("Es liegt noch kein autoritativer Commander-Live-Snapshot vor.")
+                    Text("Es liegt noch kein autoritativer Runtime-Snapshot vor.")
                 }
             }
         }
         .background(IOS27HomeBackground(style: .neutral))
-        .navigationTitle("Code Commander")
+        .navigationTitle("Master Runtime")
         .navigationBarTitleDisplayMode(.inline)
     }
 

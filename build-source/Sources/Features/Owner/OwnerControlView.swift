@@ -21,6 +21,7 @@ private struct ControlCenterView: View {
     let capabilities: OwnerCapabilityRegistry
     let appModel: AppModel?
     let runnerModel: RunnerControlModel
+    @State private var runtime = IOSNextRuntime.shared
 
     var body: some View {
         OwnerPage {
@@ -36,27 +37,21 @@ private struct ControlCenterView: View {
             await ownerModel.refreshStatusV2()
             await runnerModel.refresh()
         }
-        .task {
-            await runnerModel.refresh()
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(10))
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await runnerModel.refresh()
-            }
-        }
     }
 
     private var systemStatusCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let chat = CommunicationHealthSnapshot(
+            chatModel: runtime.chatModel,
+            adminStatus: ownerModel.chatStatusV2,
+            devices: ownerModel.chatDevicesV2
+        )
+
+        return VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(controlCenterReady ? "System bereit" : "Control Center")
                         .font(.title.bold())
-                    Text("Owner · Runner · Commander · Home Assistant")
+                    Text("Owner · Runner · Master Runtime · Home Assistant")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -70,8 +65,9 @@ private struct ControlCenterView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
                 statusBadge(title: "Owner", value: ownerHealthy ? "Online" : "Prüfen", symbol: "person.badge.key.fill", tint: ownerHealthy ? .green : .orange)
                 statusBadge(title: "Runner", value: runnerHealthy ? "Online" : runnerSummaryValue, symbol: "server.rack", tint: runnerHealthy ? .green : .orange)
-                statusBadge(title: "Commander", value: commanderSummaryValue, symbol: "terminal.fill", tint: commanderIsLive ? .green : .secondary)
+                statusBadge(title: "Runtime", value: runtimeSummaryValue, symbol: "terminal.fill", tint: runtimeIsLive ? .green : .secondary)
                 statusBadge(title: "HA", value: homeAssistantConnected ? "Verbunden" : "Prüfen", symbol: "house.fill", tint: homeAssistantConnected ? .green : .secondary)
+                statusBadge(title: "Chat", value: chat.clientTitle, symbol: "message.fill", tint: chat.isClientOnline ? .green : .orange)
             }
         }
         .padding(18)
@@ -103,7 +99,7 @@ private struct ControlCenterView: View {
     @ViewBuilder
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: IOSNextLayout.sectionSpacing) {
-            IOSNextSectionHeader(title: "Runner", subtitle: "Runner, Ressourcen und Code Commander", symbol: "server.rack")
+            IOSNextSectionHeader(title: "Runner", subtitle: "Runner, Ressourcen und Master Runtime", symbol: "server.rack")
             switch runnerModel.state {
             case let .ready(status):
                 NavigationLink {
@@ -269,10 +265,7 @@ private struct ControlCenterView: View {
     }
 
     private var ownerHealthy: Bool { ownerModel.backendStatus?.healthy == true }
-
-    private var homeAssistantConnected: Bool {
-        appModel?.connectionState == .connected
-    }
+    private var homeAssistantConnected: Bool { appModel?.connectionState == .connected }
 
     private var runnerHealthy: Bool {
         guard case let .ready(status) = runnerModel.state else { return false }
@@ -288,15 +281,15 @@ private struct ControlCenterView: View {
         }
     }
 
-    private var commanderIsLive: Bool {
+    private var runtimeIsLive: Bool {
         runnerModel.commanderLiveState.connection == .live
     }
 
-    private var commanderSummaryValue: String {
+    private var runtimeSummaryValue: String {
         switch runnerModel.commanderLiveState.connection {
         case .live: return "LIVE"
         case .connecting, .syncing, .reconnecting: return "Verbindet"
-        case .degraded: return "Degraded"
+        case .degraded: return "Eingeschränkt"
         case .unconfigured: return "Setup"
         case .disconnected: return "Offline"
         }

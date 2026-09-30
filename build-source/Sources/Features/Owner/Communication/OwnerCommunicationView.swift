@@ -3,14 +3,29 @@ import SwiftUI
 struct OwnerCommunicationView: View {
     let model: AdminControlModel
     let capabilities: OwnerCapabilityRegistry
+    @State private var runtime = IOSNextRuntime.shared
 
     var body: some View {
+        let health = CommunicationHealthSnapshot(
+            chatModel: runtime.chatModel,
+            adminStatus: model.chatStatusV2,
+            devices: model.chatDevicesV2
+        )
+
         OwnerPage {
             VStack(alignment: .leading, spacing: IOSNextLayout.pageSpacing) {
                 IOSNextSectionHeader(
                     title: "Kommunikation",
-                    subtitle: "Nur technische Relay-Metriken — keine Nachrichteninhalte",
+                    subtitle: "Client-, Relay- und Gerätegesundheit ohne Nachrichteninhalte",
                     symbol: "bubble.left.and.bubble.right.fill"
+                )
+
+                OwnerStatusRow(
+                    title: "Chat Client",
+                    detail: health.clientDetail ?? "Tatsächlicher Verbindungszustand dieser App",
+                    symbol: health.isClientOnline ? "checkmark.circle.fill" : "wifi.exclamationmark",
+                    value: health.clientTitle,
+                    tint: health.isClientOnline ? .green : .orange
                 )
 
                 if let chat = model.chatStatusV2 {
@@ -22,20 +37,25 @@ struct OwnerCommunicationView: View {
                     OwnerStatusRow(title: "Chat Rate Limit", detail: "Serverseitiges Limit pro Minute", symbol: "speedometer", value: "\(chat.chatRateLimitPerMinute)/min")
                     OwnerStatusRow(title: "Ephemeral TTL", detail: "Maximale In-Memory-Lebensdauer", symbol: "timer", value: "\(chat.ephemeralTTLSeconds)s")
                 } else if capabilities.supports(.chatRelay), let status = model.backendStatus {
-                    OwnerStatusRow(title: "Relay-Verbindung", detail: "Abgeleitet aus dem erreichbaren Owner Backend", symbol: "network", value: status.healthy ? "Online" : "Gestört", tint: status.healthy ? .green : .orange)
+                    OwnerStatusRow(title: "Relay-Verbindung", detail: "Fallback aus dem erreichbaren Owner Backend", symbol: "network", value: status.healthy ? "Online" : "Gestört", tint: status.healthy ? .green : .orange)
                     OwnerStatusRow(title: "WebSocket-Sessions", detail: "Aktive Backend-Sitzungen", symbol: "dot.radiowaves.left.and.right", value: "\(status.activeWebSocketSessions)")
-                    OwnerStatusRow(title: "Queue-Chunks", detail: "Nur technische Warteschlangenmetrik", symbol: "square.stack.3d.up.fill", value: optionalCount(status.chatQueuedChunks))
-                    OwnerStatusRow(title: "Queue-Speicher", detail: "Nur aggregierte RAM-Menge", symbol: "memorychip.fill", value: ByteCountFormatter.string(fromByteCount: Int64(status.chatQueuedBytes ?? 0), countStyle: .memory))
-                    OwnerStatusRow(title: "Geräte-Queues", detail: "Anzahl technischer Gerätewarteschlangen", symbol: "iphone.gen3", value: optionalCount(status.chatDeviceQueues))
+                    OwnerStatusRow(title: "Queue-Chunks", detail: "Noch kein v2-Chat-Snapshot; Fallback-Metrik", symbol: "square.stack.3d.up.fill", value: optionalCount(status.chatQueuedChunks))
+                    OwnerStatusRow(title: "Queue-Speicher", detail: "Noch kein v2-Chat-Snapshot; Fallback-Metrik", symbol: "memorychip.fill", value: status.chatQueuedBytes.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .memory) } ?? "Nicht geladen")
+                    OwnerStatusRow(title: "Geräte-Queues", detail: "Noch kein v2-Chat-Snapshot; Fallback-Metrik", symbol: "iphone.gen3", value: optionalCount(status.chatDeviceQueues))
                 } else {
                     OwnerCapabilityUnavailableView(title: "Chat Relay")
                 }
 
                 IOSNextSectionHeader(title: "Geräteidentitäten", subtitle: "Nur Public-Key-Fingerprints", symbol: "key.fill")
-                if model.chatDevicesV2.isEmpty {
+                if model.chatStatusV2 == nil {
                     OwnerCapabilityUnavailableView(
                         title: "Public-Key-Inventar",
-                        detail: "Keine Relay-Geräteidentitäten vom Owner Backend geladen. Private Schlüssel werden grundsätzlich nie angezeigt."
+                        detail: "Der Owner-Backend-Chat-Snapshot wurde noch nicht geladen. Das ist nicht gleichbedeutend mit 0 registrierten Geräten."
+                    )
+                } else if model.chatDevicesV2.isEmpty {
+                    OwnerCapabilityUnavailableView(
+                        title: "Public-Key-Inventar",
+                        detail: "Der Backend-Snapshot ist geladen und enthält aktuell keine Relay-Geräteidentitäten. Private Schlüssel werden grundsätzlich nie angezeigt."
                     )
                 } else {
                     ForEach(model.chatDevicesV2) { device in
@@ -55,6 +75,6 @@ struct OwnerCommunicationView: View {
     }
 
     private func optionalCount(_ value: Int?) -> String {
-        value.map(String.init) ?? "—"
+        value.map(String.init) ?? "Nicht geladen"
     }
 }

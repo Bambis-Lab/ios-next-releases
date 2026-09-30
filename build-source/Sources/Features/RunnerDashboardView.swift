@@ -2,10 +2,11 @@ import SwiftUI
 
 struct RunnerDashboardView: View {
     @State private var model: RunnerControlModel
+    @State private var runtime = IOSNextRuntime.shared
     @State private var pendingAction: RunnerAction?
 
     init() {
-        _model = State(initialValue: RunnerControlModel())
+        _model = State(initialValue: IOSNextRuntime.shared.runnerModel)
     }
 
     init(model: RunnerControlModel) {
@@ -44,6 +45,12 @@ struct RunnerDashboardView: View {
         .background(IOS27HomeBackground(style: .neutral))
         .navigationTitle("Runner")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            runtime.setRunnerPollingActive("runner-dashboard", active: true)
+        }
+        .onDisappear {
+            runtime.setRunnerPollingActive("runner-dashboard", active: false)
+        }
         .alert("Runner-Aktion fehlgeschlagen", isPresented: Binding(
             get: { model.lastError != nil },
             set: { if !$0 { model.lastError = nil } }
@@ -58,20 +65,6 @@ struct RunnerDashboardView: View {
                     model.isPresentingConfiguration = true
                 }
                 .labelStyle(.iconOnly)
-            }
-        }
-        .task {
-            await model.refresh()
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(10))
-                } catch is CancellationError {
-                    return
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await model.refresh()
             }
         }
         .refreshable { await model.refresh() }
@@ -103,7 +96,7 @@ struct RunnerDashboardView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 runnerHero(status)
 
-                IOS27SectionHeader(title: "Systemstatus", subtitle: "Antippen für Details · Live vom begrenzten Runner-Control-Dienst")
+                IOS27SectionHeader(title: "Systemstatus", subtitle: "Live vom begrenzten Runner-Control-Dienst")
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 12)], spacing: 12) {
                     metricLink(.registered, title: "Registriert", value: "\(status.registeredRunners)", symbol: "server.rack", tint: .blue, status: status)
                     metricLink(.idle, title: "Frei", value: "\(status.idleRunners)", symbol: "checkmark.circle.fill", tint: .green, status: status)
@@ -120,15 +113,15 @@ struct RunnerDashboardView: View {
                 }
 
                 if status.bridge != nil || status.orchestrator != nil {
-                    IOS27SectionHeader(title: "Infrastruktur", subtitle: "Bridge · Orchestrator")
+                    IOS27SectionHeader(title: "Infrastruktur", subtitle: "Relay · Orchestrierung")
                     if let bridge = status.bridge { subsystemCard(bridge, symbol: "point.3.connected.trianglepath.dotted") }
                     if let orchestrator = status.orchestrator { subsystemCard(orchestrator, symbol: "flowchart.fill") }
                 }
 
                 if status.commander != nil || model.commanderLiveState.effectiveSnapshot != nil {
                     IOS27SectionHeader(
-                        title: "Code Commander",
-                        subtitle: "Echtzeitstatus · Inhalte und Argumente bleiben lokal"
+                        title: "Master Runtime",
+                        subtitle: "Sanitisierte Echtzeit-Telemetrie des eigenen Systems"
                     )
                     NavigationLink {
                         CommanderLiveDetailView(model: model)
@@ -214,9 +207,20 @@ struct RunnerDashboardView: View {
     @ViewBuilder
     private func heroMetadata(_ status: RunnerStatus) -> some View {
         if let maintenance = status.maintenanceMode {
-            Label(maintenance ? "Wartung" : "Jobs aktiv", systemImage: maintenance ? "wrench.and.screwdriver.fill" : "play.fill")
+            Label(
+                maintenance ? "Wartung" : "Jobannahme aktiv",
+                systemImage: maintenance ? "wrench.and.screwdriver.fill" : "play.fill"
+            )
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(maintenance ? .orange : .green)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.055), in: Capsule())
+        }
+        if let activeJobs = status.activeJobs?.count, activeJobs > 0 {
+            Label("\(activeJobs) Jobs aktiv", systemImage: "gearshape.2.fill")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(maintenance ? .orange : .green)
+                .foregroundStyle(.blue)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 6)
                 .background(Color.primary.opacity(0.055), in: Capsule())
@@ -356,16 +360,11 @@ struct RunnerDashboardView: View {
     private func actionEnabled(_ action: RunnerAction, status: RunnerStatus) -> Bool {
         guard status.vmOnline else { return false }
         switch action {
-        case .pause:
-            return status.maintenanceMode != true
-        case .resume:
-            return status.maintenanceMode != false
-        case .healthCheck:
-            return true
-        case .gracefulRestart:
-            return status.serviceActive
-        case .shutdown:
-            return true
+        case .pause: return status.maintenanceMode != true
+        case .resume: return status.maintenanceMode != false
+        case .healthCheck: return true
+        case .gracefulRestart: return status.serviceActive
+        case .shutdown: return true
         }
     }
 
@@ -383,7 +382,6 @@ struct RunnerDashboardView: View {
         let hours = totalHours % 24
         return days > 0 ? "\(days) T \(hours) Std" : "\(hours) Std"
     }
-
 }
 
 private struct RunnerConfigurationView: View {
@@ -405,12 +403,12 @@ private struct RunnerConfigurationView: View {
                     SecureField("Control-Token", text: $token)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Live-Token (read-only)", text: $liveToken)
+                    SecureField("Runtime-Live-Token (read-only)", text: $liveToken)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
                 Section {
-                    Text("Die App unterstützt keine freie Shell. Commander Live verwendet ein separates read-only Token und fällt nicht auf das Control-Token zurück.")
+                    Text("Die App unterstützt keine freie Shell. Der vorhandene Commander-Live-Vertrag wird nur als Kompatibilitätsadapter für die sanitisierte Master-Runtime-Telemetrie verwendet; das read-only Token fällt nie auf das Control-Token zurück.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

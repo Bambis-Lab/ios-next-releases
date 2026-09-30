@@ -59,9 +59,9 @@ struct SystemView: View {
                 NavigationLink {
                     LiveOperationsView()
                 } label: {
-                    Label("Live Operations", systemImage: "waveform.path.ecg")
+                    Label("Master Runtime Live", systemImage: "waveform.path.ecg")
                 }
-                .accessibilityIdentifier("system-live-operations")
+                .accessibilityIdentifier("system-master-runtime-live")
                 Button {
                     isPresentingControlCenter = true
                 } label: {
@@ -112,6 +112,15 @@ struct SystemView: View {
 private struct DiagnosticsView: View {
     let appModel: AppModel
 
+    private static let cachedSourceCommit: String? = {
+        guard
+            let url = Bundle.main.url(forResource: "build_info", withExtension: "json"),
+            let data = try? Data(contentsOf: url),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["source_commit"] as? String
+    }()
+
     var body: some View {
         List {
             Section("Verbindung") {
@@ -132,7 +141,7 @@ private struct DiagnosticsView: View {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("Build", value: appBuild)
                 LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
-                if let sourceCommit {
+                if let sourceCommit = Self.cachedSourceCommit {
                     LabeledContent("Commit", value: String(sourceCommit.prefix(12)))
                 }
             }
@@ -153,14 +162,5 @@ private struct DiagnosticsView: View {
 
     private var appBuild: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-    }
-
-    private var sourceCommit: String? {
-        guard
-            let url = Bundle.main.url(forResource: "build_info", withExtension: "json"),
-            let data = try? Data(contentsOf: url),
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        return object["source_commit"] as? String
     }
 }

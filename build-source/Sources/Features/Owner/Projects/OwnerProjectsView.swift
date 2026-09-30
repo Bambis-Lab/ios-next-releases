@@ -4,6 +4,10 @@ struct OwnerProjectsView: View {
     let model: AdminControlModel
     let capabilities: OwnerCapabilityRegistry
 
+    private var snapshots: [ProjectPresentationSnapshot] {
+        model.projectsV2.presentationSnapshots(jobs: model.jobsV2)
+    }
+
     var body: some View {
         OwnerPage {
             VStack(alignment: .leading, spacing: IOSNextLayout.pageSpacing) {
@@ -34,26 +38,33 @@ struct OwnerProjectsView: View {
                     .buttonStyle(.plain)
                 }
 
-                IOSNextSectionHeader(title: "Projekte", subtitle: "Kanonische Repository-Zuordnung · Dispatch, Jobs und CI", symbol: "folder.fill")
-                if !model.projectsV2.isEmpty {
-                    ForEach(model.projectsV2) { project in
+                IOSNextSectionHeader(
+                    title: "Projekte",
+                    subtitle: "Ein Snapshot pro Projekt · Repository, Dispatch, Jobs und CI",
+                    symbol: "folder.fill"
+                )
+
+                if !snapshots.isEmpty {
+                    ForEach(snapshots) { snapshot in
                         NavigationLink {
-                            OwnerProjectDetailView(project: project, jobs: model.jobsV2.filter { $0.projectID == project.id })
+                            OwnerProjectDetailView(snapshot: snapshot)
                         } label: {
                             OwnerStatusRow(
-                                title: project.title,
-                                detail: ProjectRegistry.canonicalRepository(for: project) ?? "Kein Repository gemeldet",
+                                title: snapshot.title,
+                                detail: snapshot.repository ?? "Kein Repository gemeldet",
                                 symbol: "folder.fill",
-                                value: projectValue(project),
-                                tint: projectTint(project)
+                                value: projectValue(snapshot),
+                                tint: projectTint(snapshot)
                             )
                         }
                         .buttonStyle(.plain)
                     }
                 } else if model.projectRoutes.isEmpty {
                     OwnerCapabilityUnavailableView(
-                        title: "Projekt-Routen",
-                        detail: capabilities.supports(.projects) ? "Noch keine Projekt-Routen geladen." : "Projekt-Routen werden vom aktuellen Backend nicht bereitgestellt."
+                        title: "Projekt-Snapshot",
+                        detail: capabilities.supports(.projects)
+                            ? "Das Owner Backend hat noch keinen v2-Projekt-Snapshot geliefert."
+                            : "Projekt-Status wird vom aktuellen Backend nicht bereitgestellt."
                     )
                 } else {
                     ForEach(model.projectRoutes) { route in
@@ -64,7 +75,7 @@ struct OwnerProjectsView: View {
                                 title: route.title,
                                 detail: ProjectRegistry.canonicalRepository(for: route) ?? "Kein Repository gemeldet",
                                 symbol: "folder.fill",
-                                value: "Öffnen"
+                                value: "Legacy"
                             )
                         }
                         .buttonStyle(.plain)
@@ -74,21 +85,20 @@ struct OwnerProjectsView: View {
         }
         .navigationTitle("Projekte")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.refreshStatusV2() }
     }
 
     private var projectCount: Int {
-        model.projectsV2.isEmpty ? model.projectRoutes.count : model.projectsV2.count
+        snapshots.isEmpty ? model.projectRoutes.count : snapshots.count
     }
 
     private var activeJobCount: Int {
         model.jobsV2.filter { !["completed", "resolved", "failed"].contains($0.state) }.count
     }
 
-    private func projectValue(_ project: AdminProjectStatusV2) -> String {
-        if project.activeJobs > 0 { return "\(project.activeJobs) aktiv" }
-        guard let ci = project.ci else { return "CI nicht verfügbar" }
-        switch ci.status {
+    private func projectValue(_ snapshot: ProjectPresentationSnapshot) -> String {
+        if snapshot.activeJobs > 0 { return "\(snapshot.activeJobs) aktiv" }
+        guard snapshot.hasCISnapshot else { return "CI nicht geliefert" }
+        switch snapshot.ciStatus {
         case "repository_missing": return "Kein Repository"
         case "adapter_not_configured": return "CI nicht eingerichtet"
         case "queued": return "CI wartet"
@@ -99,37 +109,35 @@ struct OwnerProjectsView: View {
         case "no_runs": return "Keine CI-Läufe"
         case "unavailable": return "CI nicht erreichbar"
         default:
-            if let conclusion = ci.conclusion { return "CI \(conclusion.localizedCapitalized)" }
+            if let conclusion = snapshot.ciConclusion { return "CI \(conclusion.localizedCapitalized)" }
             return "CI Status unbekannt"
         }
     }
 
-    private func projectTint(_ project: AdminProjectStatusV2) -> Color {
-        if project.activeJobs > 0 { return .blue }
-        switch project.ci?.status {
+    private func projectTint(_ snapshot: ProjectPresentationSnapshot) -> Color {
+        if snapshot.activeJobs > 0 { return .blue }
+        switch snapshot.ciStatus {
         case "success": return .green
         case "in_progress", "queued": return .blue
         case "failure": return .red
         case "cancelled", "unavailable": return .orange
-        case "repository_missing", "adapter_not_configured", "no_runs", nil: return .secondary
         default: return .secondary
         }
     }
 }
 
 struct OwnerProjectDetailView: View {
-    let project: AdminProjectStatusV2
-    let jobs: [AdminJobStatusV2]
+    let snapshot: ProjectPresentationSnapshot
 
     var body: some View {
         OwnerPage {
             VStack(alignment: .leading, spacing: IOSNextLayout.sectionSpacing) {
-                OwnerStatusRow(title: project.title, detail: "Dispatch-Ziel", symbol: "folder.fill", value: project.id)
+                OwnerStatusRow(title: snapshot.title, detail: "Dispatch-Ziel", symbol: "folder.fill", value: snapshot.id)
 
-                if let repository = ProjectRegistry.canonicalRepository(for: project) {
+                if let repository = snapshot.repository {
                     OwnerStatusRow(
                         title: "Repository",
-                        detail: ProjectRegistry.repositoryMismatch(for: project)
+                        detail: snapshot.repositoryMismatch
                             ? "Kanonische Zuordnung · Legacy-Mapping korrigiert"
                             : "Kanonische Zuordnung",
                         symbol: "chevron.left.forwardslash.chevron.right",
@@ -140,32 +148,43 @@ struct OwnerProjectDetailView: View {
                     OwnerCapabilityUnavailableView(title: "Repository", detail: "Für dieses Projekt ist kein Repository hinterlegt.")
                 }
 
-                OwnerStatusRow(title: "Dispatches", detail: "Persistente Owner-Freigaben", symbol: "paperplane.fill", value: "\(project.dispatchCount)")
-                OwnerStatusRow(title: "Aktive Jobs", detail: "Nicht abgeschlossene Dispatch-Vorgänge", symbol: "gearshape.2.fill", value: "\(project.activeJobs)", tint: project.activeJobs > 0 ? .blue : .green)
+                OwnerStatusRow(title: "Dispatches", detail: "Persistente Owner-Freigaben", symbol: "paperplane.fill", value: "\(snapshot.dispatchCount)")
+                OwnerStatusRow(title: "Aktive Jobs", detail: "Nicht abgeschlossene Dispatch-Vorgänge", symbol: "gearshape.2.fill", value: "\(snapshot.activeJobs)", tint: snapshot.activeJobs > 0 ? .blue : .green)
 
-                if let ci = project.ci {
+                if snapshot.hasCISnapshot {
                     OwnerStatusRow(
                         title: "CI",
-                        detail: ci.workflow ?? ci.error ?? ciDetail(ci.status),
-                        symbol: ciSymbol(ci.status),
-                        value: ciTitle(ci.status),
-                        tint: ciTint(ci.status)
+                        detail: snapshot.ciWorkflow ?? snapshot.ciError ?? ciDetail(snapshot.ciStatus),
+                        symbol: ciSymbol(snapshot.ciStatus),
+                        value: ciTitle(snapshot.ciStatus),
+                        tint: ciTint(snapshot.ciStatus)
                     )
-                    if let sha = ci.headSHA {
+                    if let sha = snapshot.ciHeadSHA {
                         OwnerStatusRow(title: "CI Commit", detail: "Head SHA", symbol: "number", value: String(sha.prefix(8)))
                     }
+                    if let updatedAt = snapshot.ciUpdatedAt {
+                        OwnerStatusRow(
+                            title: "CI Aktualisiert",
+                            detail: "Zeitstempel des Backend-Snapshots",
+                            symbol: "clock.arrow.circlepath",
+                            value: updatedAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    }
                 } else {
-                    OwnerCapabilityUnavailableView(title: "CI", detail: "CI-Status wurde vom Backend nicht geliefert.")
+                    OwnerCapabilityUnavailableView(
+                        title: "CI",
+                        detail: "Das Backend hat für dieses Projekt keinen CI-Snapshot geliefert. Das wird nicht mehr als erfolgreicher oder leerer CI-Zustand interpretiert."
+                    )
                 }
 
                 IOSNextSectionHeader(title: "Letzte Jobs", subtitle: nil, symbol: "clock.arrow.circlepath")
-                if jobs.isEmpty {
-                    OwnerStatusRow(title: "Keine Jobs", detail: "Für dieses Projekt liegt noch kein Dispatch vor.", symbol: "checkmark.circle", value: "0")
+                if snapshot.jobs.isEmpty {
+                    OwnerStatusRow(title: "Keine Jobs", detail: "Für dieses Projekt liegt noch kein Dispatch-Job im Snapshot vor.", symbol: "checkmark.circle", value: "0")
                 } else {
-                    ForEach(Array(jobs.prefix(20))) { job in
+                    ForEach(Array(snapshot.jobs.prefix(20))) { job in
                         OwnerStatusRow(
                             title: job.ticketID,
-                            detail: "Freigegeben von \(job.approvedBy)",
+                            detail: "Freigegeben von \(job.approvedBy) · \(job.approvedAt.formatted(date: .abbreviated, time: .shortened))",
                             symbol: "paperplane.fill",
                             value: job.state.replacingOccurrences(of: "_", with: " ").localizedCapitalized,
                             tint: job.state == "failed" ? .red : .indigo
@@ -174,7 +193,7 @@ struct OwnerProjectDetailView: View {
                 }
             }
         }
-        .navigationTitle(project.title)
+        .navigationTitle(snapshot.title)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -199,7 +218,7 @@ struct OwnerProjectDetailView: View {
         case "adapter_not_configured": "GitHub-CI ist im Owner Backend noch nicht eingerichtet."
         case "no_runs": "Für dieses Repository wurde noch kein GitHub-Actions-Lauf gemeldet."
         case "unavailable": "GitHub-CI konnte momentan nicht abgefragt werden."
-        default: "Letzter GitHub Actions Lauf"
+        default: "Letzter vom Backend gelieferter GitHub-Actions-Status"
         }
     }
 
@@ -233,9 +252,12 @@ struct OwnerLegacyProjectDetailView: View {
             VStack(alignment: .leading, spacing: IOSNextLayout.sectionSpacing) {
                 OwnerStatusRow(title: route.title, detail: "Dispatch-Ziel", symbol: "folder.fill", value: route.id)
                 if let repository = ProjectRegistry.canonicalRepository(for: route) {
-                    OwnerStatusRow(title: "Repository", detail: "Kanonische Zuordnung", symbol: "chevron.left.forwardslash.chevron.right", value: repository, tint: .indigo)
+                    OwnerStatusRow(title: "Repository", detail: "Kanonische Fallback-Zuordnung", symbol: "chevron.left.forwardslash.chevron.right", value: repository, tint: .indigo)
                 }
-                OwnerCapabilityUnavailableView(title: "Job-Verlauf", detail: "Owner API v2 ergänzt Job- und CI-Status ohne Änderung der Hauptnavigation.")
+                OwnerCapabilityUnavailableView(
+                    title: "v2 Projekt-Snapshot",
+                    detail: "Der Legacy-Pfad bleibt nur als Fallback aktiv, bis das Owner Backend Repository, Jobs und CI gemeinsam liefert."
+                )
             }
         }
         .navigationTitle(route.title)

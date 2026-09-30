@@ -3,7 +3,7 @@ import SwiftUI
 struct AppRootView: View {
     let appModel: AppModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var chatModel = ChatModel()
+    @State private var runtime = IOSNextRuntime.shared
     @State private var isPresentingStandaloneChat = false
     @State private var didCompleteStartupReveal = false
 
@@ -40,7 +40,9 @@ struct AppRootView: View {
         }
         .task(id: appModel.isConnected) {
             if !isTestHarnessMode, appModel.isConnected {
-                await chatModel.start(using: appModel)
+                await runtime.chatModel.start(using: appModel)
+            } else if !appModel.isConnected {
+                runtime.chatModel.stop()
             }
         }
         .sheet(isPresented: Bindable(appModel).isPresentingConnection) {
@@ -49,7 +51,7 @@ struct AppRootView: View {
                 .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $isPresentingStandaloneChat) {
-            StandaloneChatView(appModel: appModel, chatModel: chatModel)
+            StandaloneChatView(appModel: appModel, chatModel: runtime.chatModel)
         }
     }
 
@@ -67,7 +69,7 @@ struct AppRootView: View {
                 }
             }
         case .connecting where !appModel.entities.isEmpty, .reconnecting where !appModel.entities.isEmpty:
-            AppShellView(appModel: appModel, chatModel: chatModel)
+            AppShellView(appModel: appModel, chatModel: runtime.chatModel)
                 .overlay(alignment: .top) {
                     ReconnectStatusOverlay(state: appModel.connectionState)
                 }
@@ -80,7 +82,7 @@ struct AppRootView: View {
     }
 
     private var connectedShell: some View {
-        AppShellView(appModel: appModel, chatModel: chatModel)
+        AppShellView(appModel: appModel, chatModel: runtime.chatModel)
             .transition(.opacity)
     }
 

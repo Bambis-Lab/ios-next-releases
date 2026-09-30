@@ -35,14 +35,17 @@ struct AppShellView: View {
     let chatModel: ChatModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedTab: AppTab?
-    @State private var navigationResetTokens: [AppTab: UUID] = Dictionary(
-        uniqueKeysWithValues: AppTab.allCases.map { ($0, UUID()) }
-    )
+    @State private var navigationPaths: [AppTab: NavigationPath]
 
     init(appModel: AppModel, chatModel: ChatModel, initialTab: AppTab = .home) {
         self.appModel = appModel
         self.chatModel = chatModel
         _selectedTab = State(initialValue: initialTab)
+        _navigationPaths = State(
+            initialValue: Dictionary(
+                uniqueKeysWithValues: AppTab.allCases.map { ($0, NavigationPath()) }
+            )
+        )
     }
 
     var body: some View {
@@ -74,10 +77,9 @@ struct AppShellView: View {
     private var phoneShell: some View {
         TabView(selection: selectedTabBinding) {
             ForEach(AppTab.allCases) { tab in
-                NavigationStack {
+                NavigationStack(path: navigationPathBinding(for: tab)) {
                     content(for: tab)
                 }
-                .id(navigationResetTokens[tab])
                 .tabItem { Label(tab.title, systemImage: tab.icon) }
                 .tag(tab)
                 .accessibilityIdentifier("app-tab-\(tab.rawValue)")
@@ -94,10 +96,10 @@ struct AppShellView: View {
             }
             .navigationTitle("iOS Next")
         } detail: {
-            NavigationStack {
-                content(for: selectedTab ?? .home)
+            let tab = selectedTab ?? .home
+            NavigationStack(path: navigationPathBinding(for: tab)) {
+                content(for: tab)
             }
-            .id(navigationResetTokens[selectedTab ?? .home])
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -124,21 +126,29 @@ struct AppShellView: View {
         Binding(
             get: { selectedTab },
             set: { value in
-                if let value {
-                    select(value)
-                } else {
+                guard let value else {
                     selectedTab = nil
+                    return
                 }
+                select(value)
             }
         )
     }
 
+    private func navigationPathBinding(for tab: AppTab) -> Binding<NavigationPath> {
+        Binding(
+            get: { navigationPaths[tab] ?? NavigationPath() },
+            set: { navigationPaths[tab] = $0 }
+        )
+    }
+
     private func select(_ tab: AppTab) {
-        if selectedTab != tab {
-            IOSNextFeedbackCenter.shared.play(.selection)
+        if selectedTab == tab {
+            navigationPaths[tab] = NavigationPath()
+            return
         }
+        IOSNextFeedbackCenter.shared.play(.selection)
         selectedTab = tab
-        navigationResetTokens[tab] = UUID()
     }
 
     private var errorBinding: Binding<Bool> {

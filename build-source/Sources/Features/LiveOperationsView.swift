@@ -1,15 +1,27 @@
 import SwiftUI
 
 struct LiveOperationsView: View {
-    @State private var model = LiveOperationsModel()
+    @State private var runtime = IOSNextRuntime.shared
+
+    private var model: LiveOperationsModel { runtime.liveOperationsModel }
+
+    private var masterActiveOperations: [LiveOperation] {
+        model.mcpState.activeOperations.values.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    private var masterRecentOperations: [LiveOperation] {
+        Array(model.mcpState.recentOperations
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(20))
+    }
 
     var body: some View {
         Group {
             if model.connectionState == .unconfigured {
                 ContentUnavailableView {
-                    Label("Live Operations nicht eingerichtet", systemImage: "waveform.path.ecg")
+                    Label("Master Runtime Live nicht eingerichtet", systemImage: "waveform.path.ecg")
                 } description: {
-                    Text("Verbinde einen read-only Live-Relay für MCP und SentinelX. Tokens, Prompts, Befehle und Ausgaben werden nicht dargestellt.")
+                    Text("Verbinde den read-only Live-Relay der eigenen Master-Runtime. Tokens, Prompts, Befehle und Ausgaben werden nicht dargestellt.")
                 } actions: {
                     Button("Einrichten") { model.isPresentingConfiguration = true }
                         .buttonStyle(.glassProminent)
@@ -19,7 +31,7 @@ struct LiveOperationsView: View {
             }
         }
         .background(IOS27HomeBackground(style: .neutral))
-        .navigationTitle("Live Operations")
+        .navigationTitle("Master Runtime Live")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -30,11 +42,10 @@ struct LiveOperationsView: View {
             }
         }
         .task { model.startIfNeeded() }
-        .onDisappear { model.stop() }
-        .sheet(isPresented: $model.isPresentingConfiguration) {
+        .sheet(isPresented: Bindable(model).isPresentingConfiguration) {
             LiveOperationsConfigurationView(model: model)
         }
-        .alert("Live Operations", isPresented: Binding(
+        .alert("Master Runtime Live", isPresented: Binding(
             get: { model.lastError != nil },
             set: { if !$0 { model.lastError = nil } }
         )) {
@@ -49,46 +60,17 @@ struct LiveOperationsView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 connectionHero
 
-                IOS27SectionHeader(title: "Quellen", subtitle: "MCP und Windows-PC über SentinelX")
-                sourceCard(.mcp, state: model.mcpState)
-                sourceCard(.sentinelX, state: model.sentinelXState)
+                IOS27SectionHeader(title: "Quelle", subtitle: "Eigener MCP-/Master-Relay")
+                sourceCard(state: model.mcpState)
 
-                if !model.activeOperations.isEmpty {
+                if !masterActiveOperations.isEmpty {
                     IOS27SectionHeader(title: "Aktiv", subtitle: "Laufzeiten werden lokal aktualisiert")
-                    VStack(spacing: 0) {
-                        ForEach(model.activeOperations) { operation in
-                            NavigationLink {
-                                LiveOperationDetailView(operation: operation)
-                            } label: {
-                                operationRow(operation, isActive: true)
-                            }
-                            .buttonStyle(.plain)
-                            if operation.id != model.activeOperations.last?.id {
-                                Divider().padding(.leading, 48)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .ios27ContentSurface(radius: 24)
+                    operationList(masterActiveOperations, active: true)
                 }
 
-                if !model.recentOperations.isEmpty {
-                    IOS27SectionHeader(title: "Zuletzt", subtitle: "Maximal 50 Vorgänge im Speicher")
-                    VStack(spacing: 0) {
-                        ForEach(model.recentOperations.prefix(20)) { operation in
-                            NavigationLink {
-                                LiveOperationDetailView(operation: operation)
-                            } label: {
-                                operationRow(operation, isActive: false)
-                            }
-                            .buttonStyle(.plain)
-                            if operation.id != model.recentOperations.prefix(20).last?.id {
-                                Divider().padding(.leading, 48)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .ios27ContentSurface(radius: 24)
+                if !masterRecentOperations.isEmpty {
+                    IOS27SectionHeader(title: "Zuletzt", subtitle: "Maximal 20 sichtbare Vorgänge")
+                    operationList(masterRecentOperations, active: false)
                 }
 
                 privacyCard
@@ -106,18 +88,18 @@ struct LiveOperationsView: View {
                     .fill(connectionColor)
                     .frame(width: 11, height: 11)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Live Operations")
+                    Text("Master Runtime")
                         .font(.title2.bold())
                     Text(connectionTitle)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(connectionColor)
                 }
                 Spacer()
-                Text("\(model.activeOperations.count) aktiv")
+                Text("\(masterActiveOperations.count) aktiv")
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            Text("Event-Push für MCP · SentinelX-Metriken gedrosselt · keine Roh-Logs")
+            Text("Sanitisierter Event-Push · keine Roh-Logs · keine Fremd-Control-Plane")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -125,55 +107,52 @@ struct LiveOperationsView: View {
         .ios27ContentSurface(radius: 28, elevated: model.connectionState == .live)
     }
 
-    private func sourceCard(_ source: LiveOperationSourceKind, state: LiveOperationsSourceState) -> some View {
-        let activeCount = state.activeOperations.count
-        return VStack(alignment: .leading, spacing: 12) {
+    private func sourceCard(state: LiveOperationsSourceState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(systemName: source == .mcp ? "point.3.connected.trianglepath.dotted" : "desktopcomputer")
+                Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.headline)
                     .foregroundStyle(state.online ? Color.green : Color.secondary)
                     .frame(width: 38, height: 38)
                     .background((state.online ? Color.green : Color.secondary).opacity(0.10), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(source == .mcp ? "MCP" : sentinelHost(state))
+                    Text("Master MCP")
                         .font(.headline)
                     Text(state.online ? "Online" : "Offline")
                         .font(.caption)
                         .foregroundStyle(state.online ? .green : .secondary)
                 }
                 Spacer()
-                Text("\(activeCount) aktiv")
+                Text("\(state.activeOperations.count) aktiv")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-            }
-
-            if source == .sentinelX {
-                HStack(spacing: 8) {
-                    metricPill("CPU", state.metrics["cpu_percent"])
-                    metricPill("RAM", state.metrics["memory_percent"])
-                    metricPill("Disk", state.metrics["disk_percent"])
-                }
             }
         }
         .padding(16)
         .ios27ContentSurface(radius: 24)
     }
 
-    @ViewBuilder
-    private func metricPill(_ label: String, _ value: LiveMetricValue?) -> some View {
-        if let value {
-            Text("\(label) \(value.displayText)%")
-                .font(.caption2.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.055), in: Capsule())
+    private func operationList(_ operations: [LiveOperation], active: Bool) -> some View {
+        VStack(spacing: 0) {
+            ForEach(operations) { operation in
+                NavigationLink {
+                    LiveOperationDetailView(operation: operation)
+                } label: {
+                    operationRow(operation, isActive: active)
+                }
+                .buttonStyle(.plain)
+                if operation.id != operations.last?.id {
+                    Divider().padding(.leading, 48)
+                }
+            }
         }
+        .padding(.horizontal, 14)
+        .ios27ContentSurface(radius: 24)
     }
 
     private func operationRow(_ operation: LiveOperation, isActive: Bool) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: operation.source == .mcp ? "bolt.fill" : "desktopcomputer")
+            Image(systemName: "bolt.fill")
                 .foregroundStyle(isActive ? .green : operation.state == .failed ? .red : .blue)
                 .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 3) {
@@ -205,7 +184,7 @@ struct LiveOperationsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Read-only Telemetrie", systemImage: "lock.shield.fill")
                 .font(.subheadline.weight(.semibold))
-            Text("Die Live-Ansicht akzeptiert nur sanitisierte Statusdaten. Tokens, Prompts, Tool-Argumente, komplette Befehle, stdout/stderr und Dateiinhalte gehören nicht in den Live-Stream.")
+            Text("Die Runtime akzeptiert nur sanitisierte Statusdaten. Tokens, Prompts, Tool-Argumente, komplette Befehle, stdout/stderr und Dateiinhalte gehören nicht in den Live-Stream.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -228,18 +207,13 @@ struct LiveOperationsView: View {
     private var connectionColor: Color {
         switch model.connectionState {
         case .live: .green
-        case .connecting, .syncing, .reconnecting: .orange
-        case .degraded: .orange
+        case .connecting, .syncing, .reconnecting, .degraded: .orange
         case .offline, .unconfigured: .secondary
         }
     }
 
-    private func sentinelHost(_ state: LiveOperationsSourceState) -> String {
-        state.sourceMetadata["host"]?.displayText ?? "Windows PC · SentinelX"
-    }
-
     private func operationContext(_ operation: LiveOperation) -> String {
-        [operation.source.title, operation.host, operation.repository, operation.workspace]
+        [operation.repository, operation.workspace, operation.host]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
@@ -259,7 +233,6 @@ private struct LiveOperationDetailView: View {
     var body: some View {
         List {
             Section("Vorgang") {
-                LabeledContent("Quelle", value: operation.source.title)
                 LabeledContent("Status", value: operation.state.rawValue)
                 LabeledContent("Typ", value: operation.kind)
                 LabeledContent("Name", value: operation.title)
@@ -296,7 +269,7 @@ private struct LiveOperationsConfigurationView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Live Relay") {
+                Section("Master Live Relay") {
                     TextField("https://live-relay.example/", text: $endpoint)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
@@ -304,7 +277,7 @@ private struct LiveOperationsConfigurationView: View {
                 }
                 Section {
                     Label("Production akzeptiert ausschließlich HTTPS/WSS.", systemImage: "lock.fill")
-                    Label("Ein Token kann nur den sanitisierten Live-Stream lesen.", systemImage: "eye.fill")
+                    Label("Das Token kann nur den sanitisierten Master-Live-Stream lesen.", systemImage: "eye.fill")
                 } header: {
                     Text("Sicherheit")
                 }
@@ -318,7 +291,7 @@ private struct LiveOperationsConfigurationView: View {
                     }
                 }
             }
-            .navigationTitle("Live Operations")
+            .navigationTitle("Master Runtime Live")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

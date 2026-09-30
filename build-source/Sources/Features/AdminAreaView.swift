@@ -5,7 +5,7 @@ struct AdminAreaView: View {
     @Environment(\.scenePhase) private var scenePhase
     let appModel: AppModel?
     @State private var model = AdminControlModel()
-    @State private var runnerModel = RunnerControlModel()
+    @State private var runtime = IOSNextRuntime.shared
     @State private var isPresentingConfiguration = false
     @State private var isLockingControlCenter = false
     @State private var dismissAfterLock = false
@@ -23,10 +23,8 @@ struct AdminAreaView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Schließen") {
-                                requestClose()
-                            }
-                            .disabled(isLockingControlCenter)
+                            Button("Schließen") { requestClose() }
+                                .disabled(isLockingControlCenter)
                         }
                         if case .unlocked = model.state {
                             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -61,21 +59,21 @@ struct AdminAreaView: View {
         .sheet(isPresented: $isPresentingConfiguration) {
             AdminConfigurationView(model: model)
         }
-        .onAppear { model.setPollingActive(scenePhase == .active) }
+        .onAppear {
+            let active = scenePhase == .active
+            model.setPollingActive(active)
+            runtime.setRunnerPollingActive("control-center", active: active)
+        }
         .onDisappear {
             model.setPollingActive(false)
-            runnerModel.stopCommanderLive()
+            runtime.setRunnerPollingActive("control-center", active: false)
         }
         .onChange(of: scenePhase) { _, phase in
             let active = phase == .active
             model.setPollingActive(active)
+            runtime.setRunnerPollingActive("control-center", active: active)
             if active, case .unlocked = model.state {
-                Task {
-                    await model.refreshStatusV2()
-                    await runnerModel.refresh()
-                }
-            } else if !active {
-                runnerModel.stopCommanderLive()
+                Task { await model.refreshStatusV2() }
             }
         }
     }
@@ -104,7 +102,7 @@ struct AdminAreaView: View {
                         model: model,
                         capabilities: model.ownerCapabilityRegistry,
                         appModel: appModel,
-                        runnerModel: runnerModel
+                        runnerModel: runtime.runnerModel
                     )
                 }
             }
@@ -117,12 +115,8 @@ struct AdminAreaView: View {
         IOSNextControlCenterLockedSurface(
             message: message,
             isAuthenticating: authenticating,
-            onUnlock: {
-                Task { await model.unlock() }
-            },
-            onConfigure: {
-                isPresentingConfiguration = true
-            }
+            onUnlock: { Task { await model.unlock() } },
+            onConfigure: { isPresentingConfiguration = true }
         )
     }
 
@@ -132,14 +126,12 @@ struct AdminAreaView: View {
             dismissAfterLock = true
             isLockingControlCenter = true
         } else {
-            runnerModel.stopCommanderLive()
             model.lock()
             dismiss()
         }
     }
 
     private func finishLock() {
-        runnerModel.stopCommanderLive()
         model.lock()
         isLockingControlCenter = false
         if dismissAfterLock {
