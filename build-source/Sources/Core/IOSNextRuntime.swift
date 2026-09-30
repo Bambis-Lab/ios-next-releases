@@ -12,14 +12,10 @@ final class IOSNextRuntime {
     private var runnerPollingTask: Task<Void, Never>?
     private var runnerPollingSources: Set<String> = []
 
-    private init(
-        chatModel: ChatModel = ChatModel(),
-        runnerModel: RunnerControlModel = RunnerControlModel(),
-        liveOperationsModel: LiveOperationsModel = LiveOperationsModel()
-    ) {
-        self.chatModel = chatModel
-        self.runnerModel = runnerModel
-        self.liveOperationsModel = liveOperationsModel
+    private init() {
+        self.chatModel = ChatModel()
+        self.runnerModel = RunnerControlModel()
+        self.liveOperationsModel = LiveOperationsModel()
     }
 
     func setRunnerPollingActive(_ source: String, active: Bool) {
