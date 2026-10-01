@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.4.0",
+          "date": "2026-10-01T08:58:30Z",
+          "localizedDescription": "Final Master Platform mit kanonischer Repository-/CI-/Runner-/Governance-Sicht, Diagnostics v3, Release Integrity, governeden Owner Actions sowie lokalem Jarvis mit iOS-27-Lifecycle und App-Intents-Systemaufruf. 30–60-Minuten-Soak ist nicht Bestandteil dieses Release-Gates.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.4.0/IOSNext.ipa",
+          "size": 6098396,
+          "minOSVersion": "27.0",
+          "buildVersion": "20"
+        },
+        {
           "version": "1.2.1",
           "date": "2026-10-01T01:29:55Z",
           "localizedDescription": "Stabilisierung: installierte iOS-Next-Version wird aus dem laufenden App-Bundle angezeigt; abweichendes Backend-Inventar wird transparent markiert. Keine neuen Write- oder Host-Control-Capabilities.",
