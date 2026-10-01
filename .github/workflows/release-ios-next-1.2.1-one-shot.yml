@@ -1,0 +1,216 @@
+name: iOS Next 1.2.1 Build 17 — SideStore Release
+
+on:
+  push:
+    branches:
+      - release/ios-next-1.2.1
+    paths:
+      - release-trigger-1.2.1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-next-1.2.1-release-one-shot
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_REPO: https://github.com/Bambis-Lab/ios-next-build.git
+      BUILD_REF: 0d991208577fdb6e1874ef85395035c1ea47b0a1
+      SOURCE_SHA: e11cec64cfd4cb7329c834d423722acca8d292c3
+      EXPECTED_BUNDLE_ID: de.nicofroeba16.iosnext
+      EXPECTED_VERSION: 1.2.1
+      EXPECTED_BUILD: '17'
+      RELEASE_TAG: v1.2.1
+      EXPECTED_MAIN_SHA: e9ef2e1f967162bf0cdbf988850b40f4c70ca282
+    steps:
+      - name: Checkout release control branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+
+      - name: Verify rollback anchor and release preconditions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing overwrite"
+            exit 1
+          fi
+          echo ROLLBACK_ANCHOR=PASS
+
+      - name: Checkout exact public build mirror snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build-source
+          git clone --no-checkout "$BUILD_REPO" build-source
+          git -C build-source checkout --detach "$BUILD_REF"
+          test "$(git -C build-source rev-parse HEAD)" = "$BUILD_REF"
+          grep -q "canonical_sha=$SOURCE_SHA" build-source/SOURCE_SHA
+          grep -q 'MARKETING_VERSION: 1.2.1' build-source/project.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 17' build-source/project.yml
+          test -f build-source/Docs/Releases/1.2.1.md
+          echo SOURCE_GATE=PASS
+
+      - name: Verify Xcode 27
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+
+      - name: Prepare free SideStore project
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash Scripts/prepare_wireguard_dependency.sh
+          export CM_COMMIT="$SOURCE_SHA"
+          export EXPECTED_VERSION="$EXPECTED_VERSION"
+          export EXPECTED_BUILD="$EXPECTED_BUILD"
+          bash Scripts/prepare_free_sideload_project.sh
+
+      - name: Build unsigned ARM64 Release app
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          xcodebuild \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Validate and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/build-source/build/DerivedData/Build/Products/Release-iphoneos/IOSNext.app"
+          test -d "$APP"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "$EXPECTED_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$EXPECTED_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$EXPECTED_BUILD"
+          test ! -e "$APP/PlugIns/IOSNextPacketTunnel.appex"
+          file "$APP/IOSNext" | grep -q arm64
+          OUT="$RUNNER_TEMP/iosnext-1.2.1"
+          rm -rf "$OUT" && mkdir -p "$OUT/Payload"
+          cp -R "$APP" "$OUT/Payload/IOSNext.app"
+          (cd "$OUT" && /usr/bin/zip -qry IOSNext.ipa Payload)
+          unzip -t "$OUT/IOSNext.ipa"
+          shasum -a 256 "$OUT/IOSNext.ipa" | tee "$OUT/IOSNext.ipa.sha256"
+          stat -f '%z' "$OUT/IOSNext.ipa" | tee "$OUT/IOSNext.ipa.size"
+          echo APP_VALIDATION=PASS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          iOS Next 1.2.1 (Build 17)
+
+          - Owner Releases uses the version from the running app bundle for iOS Next instead of trusting stale backend inventory.
+          - Backend inventory mismatches are shown explicitly instead of replacing the installed app version.
+          - Stabilization patch on top of 1.2.0; no new write or host-control capabilities are enabled.
+          - Free-Sideload-Build without PacketTunnel extension; Xcode 27 / iPhoneOS 27.0.
+          EOF
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/iosnext-1.2.1/IOSNext.ipa#IOSNext.ipa" \
+            --title "iOS Next 1.2.1" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish SideStore feed, notes and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          git checkout -B publish-1.2.1 origin/main
+          IPA="$RUNNER_TEMP/iosnext-1.2.1/IOSNext.ipa"
+          SIZE="$(stat -f '%z' "$IPA")"
+          SHA="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export SIZE SHA DATE SOURCE_SHA BUILD_REF
+          mkdir -p release-notes release-manifests
+          cp "$RUNNER_TEMP/release-notes.md" release-notes/1.2.1.md
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('source.json')
+          data=json.loads(p.read_text())
+          versions=data['apps'][0]['versions']
+          if any(v.get('version')=='1.2.1' for v in versions):
+              raise SystemExit('1.2.1 already present; refusing duplicate')
+          versions.insert(0, {
+              'version':'1.2.1',
+              'date':os.environ['DATE'],
+              'localizedDescription':'Stabilisierung: installierte iOS-Next-Version wird aus dem laufenden App-Bundle angezeigt; abweichendes Backend-Inventar wird transparent markiert. Keine neuen Write- oder Host-Control-Capabilities.',
+              'downloadURL':'https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.2.1/IOSNext.ipa',
+              'size':int(os.environ['SIZE']),
+              'minOSVersion':'27.0',
+              'buildVersion':'17'
+          })
+          p.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n')
+          manifest={
+            'schema_version':1,
+            'status':'published',
+            'app':'iOS Next',
+            'version':'1.2.1',
+            'build_version':'17',
+            'bundle_identifier':'de.nicofroeba16.iosnext',
+            'min_os_version':'27.0',
+            'source_repository':'Bambis-Lab/ios-next',
+            'source_commit':os.environ['SOURCE_SHA'],
+            'build_repository':'Bambis-Lab/ios-next-build',
+            'build_commit':os.environ['BUILD_REF'],
+            'release_tag':'v1.2.1',
+            'asset':'IOSNext.ipa',
+            'ipa_size':int(os.environ['SIZE']),
+            'ipa_sha256':os.environ['SHA'],
+            'published_at':os.environ['DATE'],
+            'rollback':{
+              'repository_commit':'e9ef2e1f967162bf0cdbf988850b40f4c70ca282',
+              'version':'1.2.0',
+              'build_version':'16',
+              'release_tag':'v1.2.0',
+              'asset':'IOSNext.ipa'
+            }
+          }
+          Path('release-manifests/1.2.1.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source.json release-notes/1.2.1.md release-manifests/1.2.1.json
+          git commit -m 'release: publish iOS Next 1.2.1 build 17 [skip ci]'
+          git push origin HEAD:main
+
+      - name: Verify published SideStore state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.2.1 --json tagName,isDraft,isPrerelease,assets
+          git fetch origin main
+          git show origin/main:source.json | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d["apps"][0]["versions"][0]; assert v["version"]=="1.2.1" and v["buildVersion"]=="17"; print("SIDESTORE_VERIFY=PASS")'
