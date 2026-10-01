@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.2.0",
+          "date": "2026-10-01T00:45:14Z",
+          "localizedDescription": "Master Runtime v2 mit detaillierten Vorgängen, Freshness/Authority/Evidence, read-only Capability Center, erweiterter Diagnose und vorbereitetem sicheren Chat-Relay-Transport.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.2.0/IOSNext.ipa",
+          "size": 5982529,
+          "minOSVersion": "27.0",
+          "buildVersion": "16"
+        },
+        {
           "version": "1.1.2",
           "date": "2026-09-30T16:39:12Z",
           "localizedDescription": "Release candidate based on `fix/1.1.2-runtime-firetv`.\n\n## Inhalt\n\n- Master Runtime verwendet den gemeinsamen Runner-/Master-Live-Kontext statt einer separaten Live-Konfiguration.\n- Die sichtbare Runtime-Darstellung ist vollständig auf Master Runtime ausgerichtet; Legacy-Telemetrie bleibt nur als interner Kompatibilitätsadapter erhalten.\n- Home-Assistant-Topologie-Lookups verwenden einen vorberechneten Index für geringeren Laufzeitaufwand.\n- Fire-TV-Media-Karten verwenden die neue V2-Presentation mit konsistenten Player-, Lautstärke-, Queue-, Wake- und Standby-Zuständen.\n- Interne Fire-TV-Systempakete und Service-Prozesse werden nicht mehr als nutzerrelevante Apps oder Now-Playing-Inhalte angezeigt.\n- Now Playing wird nur noch dargestellt, wenn tatsächlich nutzerrelevante aktive Medien- oder Playback-Daten vorliegen.\n- Regressionstests decken Master Runtime, Live-Session und Fire-TV-Verhalten für 1.1.2 ab.\n\n## Build-Gate\n\n- Xcode 27 / iPhoneOS 27.0\n- Release, ARM64\n- Bundle-ID `de.nicofroeba16.iosnext`\n- Version `1.1.2`\n- Build `15`\n- Free-Sideload-Build ohne PacketTunnel-Extension\n- Bestehende akzeptierte Motion-Baseline bleibt unverändert.\n\n## Rollback\n\nDer kanonische Rückfall bleibt die zuletzt freigegebene funktionierende SideStore-Version, bis 1.1.2 vollständig gebaut, geprüft und veröffentlicht wurde.",
