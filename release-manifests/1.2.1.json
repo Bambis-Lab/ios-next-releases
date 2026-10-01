@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "published",
+  "app": "iOS Next",
+  "version": "1.2.1",
+  "build_version": "17",
+  "bundle_identifier": "de.nicofroeba16.iosnext",
+  "min_os_version": "27.0",
+  "source_repository": "Bambis-Lab/ios-next",
+  "source_commit": "e11cec64cfd4cb7329c834d423722acca8d292c3",
+  "build_repository": "Bambis-Lab/ios-next-build",
+  "build_commit": "0d991208577fdb6e1874ef85395035c1ea47b0a1",
+  "release_tag": "v1.2.1",
+  "asset": "IOSNext.ipa",
+  "ipa_size": 5981733,
+  "ipa_sha256": "7ccdb010d0b7b9abee96492a86412f08d422e342a7be01c148d3c62a8ad67734",
+  "published_at": "2026-10-01T01:29:55Z",
+  "rollback": {
+    "repository_commit": "e9ef2e1f967162bf0cdbf988850b40f4c70ca282",
+    "version": "1.2.0",
+    "build_version": "16",
+    "release_tag": "v1.2.0",
+    "asset": "IOSNext.ipa"
+  }
+}

@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.2.1",
+          "date": "2026-10-01T01:29:55Z",
+          "localizedDescription": "Stabilisierung: installierte iOS-Next-Version wird aus dem laufenden App-Bundle angezeigt; abweichendes Backend-Inventar wird transparent markiert. Keine neuen Write- oder Host-Control-Capabilities.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.2.1/IOSNext.ipa",
+          "size": 5981733,
+          "minOSVersion": "27.0",
+          "buildVersion": "17"
+        },
+        {
           "version": "1.2.0",
           "date": "2026-10-01T00:45:14Z",
           "localizedDescription": "Master Runtime v2 mit detaillierten Vorgängen, Freshness/Authority/Evidence, read-only Capability Center, erweiterter Diagnose und vorbereitetem sicheren Chat-Relay-Transport.",
