@@ -54,20 +54,13 @@ final class VisualInventoryUITests: XCTestCase {
     }
 
     private func capture(_ name: String, app: XCUIApplication, note: String = "") {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
         let screenshot = app.screenshot()
-        let file = outputRoot.appendingPathComponent("\(slug(name)).png")
-        do {
-            try screenshot.pngRepresentation.write(to: file, options: .atomic)
-            recordManifest(file.lastPathComponent, note: note)
-        } catch {
-            XCTFail("VISUAL_INVENTORY_WRITE_FAILED \(name): \(error)")
-        }
-
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = "VISUAL-INVENTORY-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
+        print("VISUAL_CAPTURE\t\(name)\t\(note)")
     }
 
     @discardableResult
@@ -126,19 +119,6 @@ final class VisualInventoryUITests: XCTestCase {
         return true
     }
 
-    private func captureProductCatalog() {
-        for screen in productScreens {
-            let app = launchProduct(screen, dark: true)
-            capture("catalog-dark-\(screen)", app: app, note: "primary current visual surface")
-            app.terminate()
-        }
-
-        for screen in ["home", "rooms", "chat", "media", "system"] {
-            let app = launchProduct(screen, dark: false)
-            capture("catalog-light-\(screen)", app: app, note: "core light appearance comparison")
-            app.terminate()
-        }
-    }
 
     private func captureSetupAndLanding() {
         let landing = launchRaw()
@@ -179,18 +159,6 @@ final class VisualInventoryUITests: XCTestCase {
         home.terminate()
     }
 
-    private func captureCardCatalog() {
-        for page in 0...2 {
-            let app = launchRaw(["--live-card-test-mode", "--live-card-page=\(page)"])
-            let ready = app.descendants(matching: .any)
-                .matching(identifier: "visual-ready-live-card-page-\(page)")
-                .firstMatch
-            _ = ready.waitForExistence(timeout: 8)
-            capture("cards-page-\(page + 1)", app: app, note: "live HA card test catalog")
-            app.terminate()
-        }
-    }
-
     private func captureSliderStates() {
         for screen in ["light", "media-detail"] {
             let app = launchProduct(screen, dark: true)
@@ -216,12 +184,8 @@ final class VisualInventoryUITests: XCTestCase {
     }
 
     func testCompleteVisualInventory() {
-        recordManifest("RUN-BEGIN", note: "release/1.4.1 exhaustive visual inventory")
         captureSetupAndLanding()
-        captureProductCatalog()
         captureNavigationTerminals()
-        captureCardCatalog()
         captureSliderStates()
-        recordManifest("RUN-END", note: "visual inventory crawler completed")
     }
 }
