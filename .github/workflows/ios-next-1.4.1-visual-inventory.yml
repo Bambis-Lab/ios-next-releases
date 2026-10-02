@@ -283,6 +283,101 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/ios-next-visual-inventory/screenshots
+            ${{ runner.temp }}/ios-next-visual-inventory/logs
+            ${{ runner.temp }}/ios-next-visual-inventory/summary.txt
+            ${{ runner.temp }}/ios-next-visual-inventory/index.html
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${SIM_UDID:-}" ]; then
+            xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
+            if [ "${SIM_CREATED:-0}" = "1" ]; then
+              xcrun simctl delete "$SIM_UDID" 2>/dev/null || true
+            fi
+          fi      - name: Capture all reachable visual states
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl ui "$SIM_UDID" appearance dark
+          xcrun simctl ui "$SIM_UDID" content_size large
+          OUT="$RUNNER_TEMP/$OUT_NAME"
+
+          rm -rf "$OUT/VisualInventory.xcresult" "$OUT/screenshots"
+          mkdir -p "$OUT/screenshots"
+
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN_PATH" \
+            -destination "$DESTINATION" \
+            -only-testing:IOSNextUITests/VisualInventoryUITests \
+            -parallel-testing-enabled YES \
+            -maximum-parallel-testing-workers 5 \
+            -resultBundlePath "$OUT/VisualInventory.xcresult" \
+            | tee "$OUT/logs/visual-inventory.log"
+
+          xcrun xcresulttool export attachments \
+            --path "$OUT/VisualInventory.xcresult" \
+            --output-path "$OUT/screenshots" \
+            2>&1 | tee "$OUT/logs/xcresult-export.log"
+
+          find "$OUT/screenshots" -type f -name '*.png' -print | sort > "$OUT/screenshots/files.txt"
+          count="$(wc -l < "$OUT/screenshots/files.txt" | tr -d ' ')"
+          {
+            echo "VISUAL_INVENTORY=PASS"
+            echo "screenshot_count=$count"
+            echo "release_repo=Bambis-Lab/ios-next-releases"
+            echo "release_branch=audit/ios-next-1.4.1-visual-inventory"
+            echo "build_repo=$BUILD_REPOSITORY"
+            echo "build_sha=$BUILD_SHA"
+            echo "device=$DEVICE_NAME"
+            echo "release_app_built=false"
+            echo "ipa_built=false"
+            echo "simulator_test_product_only=true"
+            echo "wireguard_in_test_graph=false"
+            echo "parallel_workers=5"
+          } | tee "$OUT/summary.txt"
+          test "$count" -ge 25
+
+      - name: Build visual index
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / os.environ["OUT_NAME"]
+          shots = sorted((root / "screenshots").glob("*.png"))
+          cards = []
+          for p in shots:
+              cards.append(
+                  f'<figure><img src="screenshots/{html.escape(p.name)}">'
+                  f'<figcaption>{html.escape(p.name)}</figcaption></figure>'
+              )
+          doc = """<!doctype html><meta charset="utf-8">
+          <title>iOS Next 1.4.1 Visual Inventory</title>
+          <style>
+          body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;margin:24px}
+          main{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+          figure{margin:0;background:#1b1b1d;padding:10px;border-radius:16px}
+          img{width:100%;height:auto;border-radius:10px}
+          figcaption{font-size:12px;word-break:break-all;margin-top:8px}
+          </style><h1>iOS Next 1.4.1 Visual Inventory</h1><main>""" + "".join(cards) + "</main>"
+          (root / "index.html").write_text(doc)
+          PY
+
+      - name: Upload screenshots and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-next-1.4.1-complete-visual-inventory
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
             ${{ runner.temp }}/ios-next-visual-inventory
 
       - name: Cleanup
