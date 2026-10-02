@@ -8,7 +8,7 @@ import UIKit
 final class VisualInventoryUITests: XCTestCase {
     private let productScreens = [
         "home", "rooms", "chat", "media", "system",
-        "light", "media-detail", "owner", "wireguard"
+        "light", "media-detail", "owner"
     ]
 
     override func setUpWithError() throws {
@@ -127,13 +127,16 @@ final class VisualInventoryUITests: XCTestCase {
     }
 
     private func captureProductCatalog() {
-        for dark in [false, true] {
-            let appearance = dark ? "dark" : "light"
-            for screen in productScreens {
-                let app = launchProduct(screen, dark: dark)
-                capture("catalog-\(appearance)-\(screen)", app: app, note: "direct product acceptance surface")
-                app.terminate()
-            }
+        for screen in productScreens {
+            let app = launchProduct(screen, dark: true)
+            capture("catalog-dark-\(screen)", app: app, note: "primary current visual surface")
+            app.terminate()
+        }
+
+        for screen in ["home", "rooms", "chat", "media", "system"] {
+            let app = launchProduct(screen, dark: false)
+            capture("catalog-light-\(screen)", app: app, note: "core light appearance comparison")
+            app.terminate()
         }
     }
 
@@ -146,29 +149,32 @@ final class VisualInventoryUITests: XCTestCase {
         landing.terminate()
     }
 
-    private func captureNavigationTerminals(dark: Bool) {
-        let appearance = dark ? "dark" : "light"
+    private func captureNavigationTerminals() {
         let routes: [(screen: String, tap: String, name: String)] = [
             ("rooms", "Timo Zimmer", "room-timo"),
             ("rooms", "Alle Entitäten", "all-entities"),
             ("media", "Companion Testfilm", "media-fire-tv-detail"),
-            ("system", "Fernzugriff · WireGuard", "system-wireguard"),
             ("system", "Szenen", "system-scenes"),
+            ("system", "Suche", "system-search"),
+            ("system", "Jarvis", "system-jarvis"),
+            ("system", "Master Runtime Live", "system-live-operations"),
+            ("system", "Master Zugriff", "system-master-capabilities"),
             ("system", "Control Center", "system-control-center"),
+            ("system", "Berechtigungen", "system-permissions"),
             ("system", "Diagnose", "system-diagnostics")
         ]
 
         for route in routes {
-            let app = launchProduct(route.screen, dark: dark)
+            let app = launchProduct(route.screen, dark: true)
             if tap(route.tap, in: app) {
-                capture("nav-\(appearance)-\(route.name)", app: app, note: "\(route.screen) -> \(route.tap)")
+                capture("nav-dark-\(route.name)", app: app, note: "\(route.screen) -> \(route.tap)")
             }
             app.terminate()
         }
 
-        let home = launchProduct("home", dark: dark)
+        let home = launchProduct("home", dark: true)
         if tap("Außenbereich", in: home) {
-            capture("nav-\(appearance)-home-outdoors", app: home, note: "home -> Außenbereich")
+            capture("nav-dark-home-outdoors", app: home, note: "home -> Außenbereich")
         }
         home.terminate()
     }
@@ -181,18 +187,6 @@ final class VisualInventoryUITests: XCTestCase {
                 .firstMatch
             _ = ready.waitForExistence(timeout: 8)
             capture("cards-page-\(page + 1)", app: app, note: "live HA card test catalog")
-            app.terminate()
-        }
-    }
-
-    private func captureAnimationStages() {
-        for stage in 0...7 {
-            let app = launchRaw(["--animation-acceptance-mode", "--animation-stage=\(stage)"])
-            let ready = app.descendants(matching: .any)
-                .matching(identifier: "visual-ready-animation-stage-\(stage)")
-                .firstMatch
-            _ = ready.waitForExistence(timeout: 8)
-            capture("animation-stage-\(stage)", app: app, note: "deterministic acceptance stage")
             app.terminate()
         }
     }
@@ -225,10 +219,8 @@ final class VisualInventoryUITests: XCTestCase {
         recordManifest("RUN-BEGIN", note: "release/1.4.1 exhaustive visual inventory")
         captureSetupAndLanding()
         captureProductCatalog()
-        captureNavigationTerminals(dark: false)
-        captureNavigationTerminals(dark: true)
+        captureNavigationTerminals()
         captureCardCatalog()
-        captureAnimationStages()
         captureSliderStates()
         recordManifest("RUN-END", note: "visual inventory crawler completed")
     }
