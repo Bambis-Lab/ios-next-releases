@@ -20,47 +20,13 @@ final class VisualInventoryUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
-    private var outputRoot: URL {
-        let raw = ProcessInfo.processInfo.environment["IOSNEXT_VISUAL_INVENTORY_DIR"]
-            ?? NSTemporaryDirectory() + "/ios-next-visual-inventory"
-        let url = URL(fileURLWithPath: raw, isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }
-
-    private func slug(_ value: String) -> String {
-        value.lowercased()
-            .replacingOccurrences(of: " ", with: "-")
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: "·", with: "-")
-            .replacingOccurrences(of: "ä", with: "ae")
-            .replacingOccurrences(of: "ö", with: "oe")
-            .replacingOccurrences(of: "ü", with: "ue")
-            .replacingOccurrences(of: "ß", with: "ss")
-            .replacingOccurrences(of: "--", with: "-")
-    }
-
-    private func recordManifest(_ name: String, note: String = "") {
-        let line = "\(name)\t\(note.replacingOccurrences(of: "\n", with: " "))\n"
-        let url = outputRoot.appendingPathComponent("manifest.tsv")
-        if FileManager.default.fileExists(atPath: url.path),
-           let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-        } else {
-            try? Data("name\tnote\n\(line)".utf8).write(to: url, options: .atomic)
-        }
-    }
-
     private func capture(_ name: String, app: XCUIApplication, note: String = "") {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.12))
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = "VISUAL-INVENTORY-\(name)"
+        attachment.name = "VISUAL-INVENTORY--\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
-        print("VISUAL_CAPTURE\t\(name)\t\(note)")
     }
 
     @discardableResult
