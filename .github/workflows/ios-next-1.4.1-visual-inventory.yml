@@ -122,33 +122,86 @@ jobs:
           test -f "$XCTESTRUN_PATH"
           echo "XCTESTRUN_PATH=$XCTESTRUN_PATH" >> "$GITHUB_ENV"
 
-      - name: Capture visual inventory in parallel
+      - name: Capture direct static surfaces
         working-directory: build-source
         shell: bash
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/$OUT_NAME"
+          APP_ID="de.nicofroeba16.iosnext"
+          APP_PATH="$DERIVED/Build/Products/Debug-iphonesimulator/IOSNext.app"
+
           xcrun simctl bootstatus "$SIM_UDID" -b
+          test -d "$APP_PATH"
+          xcrun simctl install "$SIM_UDID" "$APP_PATH"
 
-          rm -rf "$OUT/VisualInventory.xcresult" "$OUT/screenshots"
-          mkdir -p "$OUT/screenshots"
+          capture_product() {
+            screen="$1"
+            appearance="$2"
+            out="$OUT/screenshots/catalog-$appearance-$screen.png"
 
-          xcodebuild test-without-building             -xctestrun "$XCTESTRUN_PATH"             -destination "$DESTINATION"             -only-testing:IOSNextUITests/VisualInventoryUITests             -parallel-testing-enabled YES             -maximum-parallel-testing-workers 5             -resultBundlePath "$OUT/VisualInventory.xcresult"             | tee "$OUT/logs/visual-inventory.log"
+            xcrun simctl ui "$SIM_UDID" appearance "$appearance"
+            xcrun simctl terminate "$SIM_UDID" "$APP_ID" 2>/dev/null || true
 
-          xcrun xcresulttool export attachments             --path "$OUT/VisualInventory.xcresult"             --output-path "$OUT/screenshots"             | tee "$OUT/logs/xcresult-export.log"
+            if [ "$appearance" = "dark" ]; then
+              xcrun simctl launch "$SIM_UDID" "$APP_ID" "--product-ui-test-screen=$screen" --product-ui-test-dark >/dev/null
+            else
+              xcrun simctl launch "$SIM_UDID" "$APP_ID" "--product-ui-test-screen=$screen" >/dev/null
+            fi
+
+            sleep 0.65
+            xcrun simctl io "$SIM_UDID" screenshot "$out" >/dev/null
+          }
+
+          for screen in home rooms chat media system light media-detail owner; do
+            capture_product "$screen" dark
+          done
+
+          for screen in home rooms chat media system; do
+            capture_product "$screen" light
+          done
+
+          xcrun simctl ui "$SIM_UDID" appearance dark
+          for page in 0 1 2; do
+            xcrun simctl terminate "$SIM_UDID" "$APP_ID" 2>/dev/null || true
+            xcrun simctl launch "$SIM_UDID" "$APP_ID" --live-card-test-mode "--live-card-page=$page" >/dev/null
+            sleep 0.65
+            number=$((page + 1))
+            xcrun simctl io "$SIM_UDID" screenshot "$OUT/screenshots/cards-page-$number.png" >/dev/null
+          done
+
+          echo "direct_static_count=$(find "$OUT/screenshots" -name '*.png' | wc -l | tr -d ' ')"             | tee "$OUT/logs/direct-capture.log"
+
+      - name: Capture interactive menus and sliders in parallel
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/$OUT_NAME"
+          rm -rf "$OUT/Interactive.xcresult" "$OUT/interactive-attachments"
+
+          xcodebuild test-without-building             -xctestrun "$XCTESTRUN_PATH"             -destination "$DESTINATION"             -only-testing:IOSNextUITests/VisualInventoryUITests             -parallel-testing-enabled YES             -maximum-parallel-testing-workers 5             -resultBundlePath "$OUT/Interactive.xcresult"             | tee "$OUT/logs/interactive-inventory.log"
+
+          mkdir -p "$OUT/interactive-attachments"
+          xcrun xcresulttool export attachments             --path "$OUT/Interactive.xcresult"             --output-path "$OUT/interactive-attachments"             | tee "$OUT/logs/xcresult-export.log"
+
+          find "$OUT/interactive-attachments" -type f -name '*.png' -exec cp {} "$OUT/screenshots/" \;
 
           find "$OUT/screenshots" -type f -name '*.png' -print | sort > "$OUT/screenshots/files.txt"
           count="$(wc -l < "$OUT/screenshots/files.txt" | tr -d ' ')"
+
           {
             echo "VISUAL_INVENTORY=PASS"
             echo "screenshot_count=$count"
             echo "parallel_workers=5"
+            echo "static_capture=simctl"
+            echo "interactive_capture=xcuitest"
             echo "wireguard_in_test_graph=false"
             echo "build_sha=$BUILD_SHA"
           } | tee "$OUT/summary.txt"
 
           test "$count" -ge 25
-          rm -rf "$OUT/VisualInventory.xcresult"
+          rm -rf "$OUT/Interactive.xcresult" "$OUT/interactive-attachments"
 
       - name: Build HTML visual index
         if: always()
