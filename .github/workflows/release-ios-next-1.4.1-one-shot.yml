@@ -1,0 +1,220 @@
+name: iOS Next 1.4.1 Build 21 — SideStore Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-ios-next-1.4.1-one-shot.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-next-1.4.1-release-one-shot
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_REPOSITORY: Bambis-Lab/ios-next-build
+      BUILD_REF: build/ios-next-1.4.1-xcode27
+      EXPECTED_BUNDLE_ID: de.nicofroeba16.iosnext
+      EXPECTED_VERSION: 1.4.1
+      EXPECTED_BUILD: '21'
+      RELEASE_TAG: v1.4.1
+      RELEASE_ASSET: IOSNext.ipa
+      CANONICAL_SOURCE_COMMIT: 187fd62f3b80d29969ca8c998ffc383f386ae8bb
+
+    steps:
+      - name: Checkout release repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Checkout exact 1.4.1 build source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ env.BUILD_REPOSITORY }}
+          ref: ${{ env.BUILD_REF }}
+          path: build-source
+          fetch-depth: 1
+
+      - name: Verify Xcode 27 and release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          grep -q 'MARKETING_VERSION: 1.4.1' build-source/project.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 21' build-source/project.yml
+          grep -q '@State private var draftVolume' build-source/Sources/Design/MediaControlSheet.swift
+          grep -q 'MediaSeekControl' build-source/Sources/Design/MediaControlSheet.swift
+          grep -q '@State private var draftBrightness' build-source/Sources/Features/RoomsView.swift
+          grep -q 'entity.supportsColor ? "paintpalette.fill"' build-source/Sources/Features/RoomsView.swift
+
+          # Juli TV background coupling is a release regression gate.
+          grep -q 'private var tvAllowsLight: Bool { tv?.isOn == true }' build-source/Sources/Features/RoomsView.swift
+          grep -q 'private var canToggle: Bool { light.isOn || tvAllowsLight }' build-source/Sources/Features/RoomsView.swift
+          grep -q 'canTurnOn: tvAllowsLight' build-source/Sources/Features/RoomsView.swift
+          grep -q 'Nur bei eingeschaltetem Juli TV' build-source/Sources/Features/RoomsView.swift
+
+          # Control Center retains haptics while synthetic unlock audio is disabled.
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("build-source/Sources/Design/IOSNextFeedback.swift").read_text()
+          block = source.split("private func soundProfile", 1)[1].split("private func playSound", 1)[0]
+          assert "case .controlCenterUnlock:\n            nil" in block
+          PY
+
+      - name: Prepare Xcode project
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          bash Scripts/prepare_wireguard_dependency.sh
+          export CM_COMMIT="$CANONICAL_SOURCE_COMMIT"
+          export EXPECTED_VERSION="$EXPECTED_VERSION"
+          export EXPECTED_BUILD="$EXPECTED_BUILD"
+          bash Scripts/prepare_free_sideload_project.sh
+          python3 Scripts/validate_apple_final_acceptance_source.py
+
+      - name: Build unsigned ARM64 Release
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          mkdir -p build/Payload
+          xcodebuild \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Validate and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build-source/build/DerivedData/Build/Products/Release-iphoneos/IOSNext.app"
+          PLIST="$APP/Info.plist"
+          test -d "$APP"
+          test -x "$APP/IOSNext"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "$EXPECTED_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$EXPECTED_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$EXPECTED_BUILD"
+          file "$APP/IOSNext" | grep -q arm64
+          ! find "$APP" -type d -name '*.appex' | grep -q .
+
+          OUT="$RUNNER_TEMP/ios-next-1.4.1"
+          rm -rf "$OUT"
+          mkdir -p "$OUT/Payload"
+          cp -R "$APP" "$OUT/Payload/IOSNext.app"
+          (cd "$OUT" && /usr/bin/zip -qry "$RELEASE_ASSET" Payload)
+
+          test -s "$OUT/$RELEASE_ASSET"
+          unzip -t "$OUT/$RELEASE_ASSET"
+          shasum -a 256 "$OUT/$RELEASE_ASSET" | tee "$OUT/$RELEASE_ASSET.sha256"
+          stat -f '%z' "$OUT/$RELEASE_ASSET" | tee "$OUT/$RELEASE_ASSET.size"
+
+      - name: Upload validated build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOSNext-1.4.1-build21
+          path: |
+            ${{ runner.temp }}/ios-next-1.4.1/IOSNext.ipa
+            ${{ runner.temp }}/ios-next-1.4.1/IOSNext.ipa.sha256
+            ${{ runner.temp }}/ios-next-1.4.1/IOSNext.ipa.size
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release and SideStore feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$RUNNER_TEMP/ios-next-1.4.1/$RELEASE_ASSET"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing duplicate."
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" "$IPA#$RELEASE_ASSET" \
+            --title "iOS Next 1.4.1 (Build 21)" \
+            --notes-file release-notes/1.4.1.md \
+            --target main
+
+          PUBLISHED_AT="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$RELEASE_TAG" --jq .published_at)"
+          SIZE="$(stat -f '%z' "$IPA")"
+          SHA256="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          BUILD_COMMIT="$(git -C build-source rev-parse HEAD)"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$RELEASE_TAG/$RELEASE_ASSET"
+
+          python3 scripts/publish_version.py \
+            --version "$EXPECTED_VERSION" \
+            --build-version "$EXPECTED_BUILD" \
+            --date "$PUBLISHED_AT" \
+            --download-url "$DOWNLOAD_URL" \
+            --size "$SIZE" \
+            --min-os-version 27.0
+
+          cat > "release-manifests/$EXPECTED_VERSION.json" <<EOF
+          {
+            "schema_version": 1,
+            "status": "published",
+            "app": "iOS Next",
+            "version": "$EXPECTED_VERSION",
+            "build_version": "$EXPECTED_BUILD",
+            "bundle_identifier": "$EXPECTED_BUNDLE_ID",
+            "min_os_version": "27.0",
+            "source_repository": "Bambis-Lab/ios-next",
+            "source_commit": "$CANONICAL_SOURCE_COMMIT",
+            "build_repository": "$BUILD_REPOSITORY",
+            "build_commit": "$BUILD_COMMIT",
+            "release_tag": "$RELEASE_TAG",
+            "asset": "$RELEASE_ASSET",
+            "ipa_size": $SIZE,
+            "ipa_sha256": "$SHA256",
+            "published_at": "$PUBLISHED_AT",
+            "rollback": {
+              "version": "1.4.0",
+              "build_version": "20",
+              "release_tag": "v1.4.0",
+              "asset": "IOSNext.ipa"
+            }
+          }
+          EOF
+
+          python3 -m json.tool source.json >/dev/null
+          python3 -m json.tool "release-manifests/$EXPECTED_VERSION.json" >/dev/null
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source.json release-notes/1.4.1.md "release-manifests/$EXPECTED_VERSION.json"
+          git commit -m "release: publish iOS Next 1.4.1 build 21 [skip ci]"
+          git push origin main
+
+      - name: Verify published SideStore state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.4.1 --json tagName,isDraft,isPrerelease,assets
+          git fetch origin main
+          git show origin/main:source.json | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d["apps"][0]["versions"][0]; assert v["version"]=="1.4.1" and v["buildVersion"]=="21"; print("SIDESTORE_VERIFY=PASS")'
