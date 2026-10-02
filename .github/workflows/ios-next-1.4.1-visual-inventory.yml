@@ -1,0 +1,194 @@
+name: iOS Next 1.4.1 — Complete Visual Inventory
+
+on:
+  push:
+    branches:
+      - audit/ios-next-1.4.1-visual-inventory
+    paths:
+      - ".github/workflows/ios-next-1.4.1-visual-inventory.yml"
+      - "audit/VisualInventoryUITests.swift"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-next-1.4.1-visual-inventory
+  cancel-in-progress: true
+
+jobs:
+  visual-inventory:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_REPOSITORY: Bambis-Lab/ios-next-build
+      BUILD_SHA: 75f127ddf27f620855ec190bd0282b69aad61401
+      DEVICE_NAME: iPhone 18 Pro Max
+      SCHEME: IOSNext
+      OUT: ${{ runner.temp }}/ios-next-visual-inventory
+
+    steps:
+      - name: Checkout audit harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: audit/ios-next-1.4.1-visual-inventory
+          fetch-depth: 1
+
+      - name: Checkout exact public 1.4.1 build source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ env.BUILD_REPOSITORY }}
+          ref: ${{ env.BUILD_SHA }}
+          path: build-source
+          fetch-depth: 1
+
+      - name: Verify source and runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT/screenshots" "$OUT/logs"
+          {
+            echo "release_harness_sha=$(git rev-parse HEAD)"
+            echo "build_source_sha=$(git -C build-source rev-parse HEAD)"
+            xcodebuild -version
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes
+          } | tee "$OUT/logs/environment.log"
+          test "$(git -C build-source rev-parse HEAD)" = "$BUILD_SHA"
+          grep -q 'MARKETING_VERSION: 1.4.1' build-source/project.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 21' build-source/project.yml
+
+      - name: Inject visual inventory test only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp audit/VisualInventoryUITests.swift build-source/UITests/VisualInventoryUITests.swift
+          test -s build-source/UITests/VisualInventoryUITests.swift
+
+      - name: Prepare simulator test project
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          bash Scripts/prepare_wireguard_dependency.sh
+          xcodegen generate
+          test -f IOSNext.xcodeproj/project.pbxproj
+
+      - name: Create iOS 27 simulator and fake HA
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_id="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(r["identifier"] for r in d["runtimes"] if r.get("isAvailable",True) and r.get("name")=="iOS 27.0"))')"
+          device_type_id="$(DEVICE_NAME="$DEVICE_NAME" xcrun simctl list devicetypes -j | python3 -c 'import json,os,sys; d=json.load(sys.stdin); n=os.environ["DEVICE_NAME"]; print(next(x["identifier"] for x in d["devicetypes"] if x.get("name")==n))')"
+          SIM_UDID="$(xcrun simctl create "$DEVICE_NAME" "$device_type_id" "$runtime_id")"
+          echo "SIM_UDID=$SIM_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$SIM_UDID"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl ui "$SIM_UDID" appearance dark
+          xcrun simctl ui "$SIM_UDID" content_size large
+
+          FAKE_HA_PORT_FILE="$RUNNER_TEMP/fake-ha.port"
+          python3 build-source/Scripts/fake_ha_websocket_server.py             --host 127.0.0.1             --port 0             --port-file "$FAKE_HA_PORT_FILE"             >"$OUT/logs/fake-ha.log" 2>&1 &
+          echo "FAKE_HA_PID=$!" >> "$GITHUB_ENV"
+
+          for _ in $(seq 1 100); do
+            [ -s "$FAKE_HA_PORT_FILE" ] && break
+            sleep 0.1
+          done
+          test -s "$FAKE_HA_PORT_FILE"
+          FAKE_HA_PORT="$(tr -d '[:space:]' < "$FAKE_HA_PORT_FILE")"
+          echo "FAKE_HA_PORT=$FAKE_HA_PORT" >> "$GITHUB_ENV"
+          xcrun simctl spawn "$SIM_UDID" launchctl setenv FAKE_HA_PORT "$FAKE_HA_PORT"
+
+      - name: Build test product only
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          DERIVED="$RUNNER_TEMP/ios-next-visual-derived"
+          DESTINATION="platform=iOS Simulator,id=$SIM_UDID"
+          echo "DERIVED=$DERIVED" >> "$GITHUB_ENV"
+          echo "DESTINATION=$DESTINATION" >> "$GITHUB_ENV"
+
+          xcodebuild build-for-testing             -project IOSNext.xcodeproj             -scheme "$SCHEME"             -derivedDataPath "$DERIVED"             -destination "$DESTINATION"             CODE_SIGNING_ALLOWED=NO             | tee "$OUT/logs/build-for-testing.log"
+
+          XCTESTRUN_PATH="$(find "$DERIVED/Build/Products" -name '*.xctestrun' -print -quit)"
+          test -f "$XCTESTRUN_PATH"
+          echo "XCTESTRUN_PATH=$XCTESTRUN_PATH" >> "$GITHUB_ENV"
+
+      - name: Capture all reachable visual states
+        working-directory: build-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          export IOSNEXT_VISUAL_INVENTORY_DIR="$OUT/screenshots"
+
+          xcodebuild test-without-building             -xctestrun "$XCTESTRUN_PATH"             -destination "$DESTINATION"             -only-testing:IOSNextUITests/VisualInventoryUITests/testCompleteVisualInventory             -resultBundlePath "$OUT/VisualInventory.xcresult"             | tee "$OUT/logs/visual-inventory.log"
+
+          test -f "$OUT/screenshots/manifest.tsv"
+          count="$(find "$OUT/screenshots" -name '*.png' | wc -l | tr -d ' ')"
+          {
+            echo "VISUAL_INVENTORY=PASS"
+            echo "screenshot_count=$count"
+            echo "release_repo=Bambis-Lab/ios-next-releases"
+            echo "release_branch=audit/ios-next-1.4.1-visual-inventory"
+            echo "build_repo=$BUILD_REPOSITORY"
+            echo "build_sha=$BUILD_SHA"
+            echo "device=$DEVICE_NAME"
+            echo "release_app_built=false"
+            echo "ipa_built=false"
+            echo "simulator_test_product_only=true"
+          } | tee "$OUT/summary.txt"
+          test "$count" -ge 35
+
+      - name: Build visual index
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html, os
+          from pathlib import Path
+          root = Path(os.environ["OUT"])
+          shots = sorted((root / "screenshots").glob("*.png"))
+          cards = []
+          for p in shots:
+              cards.append(
+                  f'<figure><img src="screenshots/{html.escape(p.name)}">'
+                  f'<figcaption>{html.escape(p.name)}</figcaption></figure>'
+              )
+          doc = """<!doctype html><meta charset="utf-8">
+          <title>iOS Next 1.4.1 Visual Inventory</title>
+          <style>
+          body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;margin:24px}
+          main{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+          figure{margin:0;background:#1b1b1d;padding:10px;border-radius:16px}
+          img{width:100%;height:auto;border-radius:10px}
+          figcaption{font-size:12px;word-break:break-all;margin-top:8px}
+          </style><h1>iOS Next 1.4.1 Visual Inventory</h1><main>""" + "".join(cards) + "</main>"
+          (root / "index.html").write_text(doc)
+          PY
+
+      - name: Upload screenshots and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-next-1.4.1-complete-visual-inventory
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/ios-next-visual-inventory
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          [ -n "${FAKE_HA_PID:-}" ] && kill "$FAKE_HA_PID" 2>/dev/null || true
+          if [ -n "${SIM_UDID:-}" ]; then
+            xcrun simctl spawn "$SIM_UDID" launchctl unsetenv FAKE_HA_PORT 2>/dev/null || true
+            xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
+            xcrun simctl delete "$SIM_UDID" 2>/dev/null || true
+          fi
