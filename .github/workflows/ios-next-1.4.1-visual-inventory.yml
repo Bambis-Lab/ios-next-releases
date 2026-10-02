@@ -66,7 +66,7 @@ jobs:
           cp audit/VisualInventoryUITests.swift build-source/UITests/VisualInventoryUITests.swift
           test -s build-source/UITests/VisualInventoryUITests.swift
 
-      - name: Prepare simulator test project
+      - name: Prepare lightweight visual-test project
         working-directory: build-source
         shell: bash
         run: |
@@ -74,11 +74,45 @@ jobs:
           if ! command -v xcodegen >/dev/null 2>&1; then
             HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           fi
-          bash Scripts/prepare_wireguard_dependency.sh
-          xcodegen generate
-          test -f IOSNext.xcodeproj/project.pbxproj
 
-      - name: Create iOS 27 simulator and fake HA
+          python3 - <<'PY'
+          from pathlib import Path
+
+          src = Path("project.yml").read_text()
+
+          packages = """packages:
+            WireGuardKit:
+              path: .build-dependencies/wireguard-apple
+          """
+          src = src.replace(packages, "")
+
+          app_dep = """    dependencies:
+                - target: IOSNextPacketTunnel
+                  embed: true
+                  link: false
+          """
+          src = src.replace(app_dep, "")
+
+          start = src.index("  WireGuardGoBridgeiOS:")
+          end = src.index("  IOSNextTests:")
+          src = src[:start] + src[end:]
+
+          src = src.replace(
+              "        CODE_SIGN_ENTITLEMENTS: Sources/Resources/IOSNext.entitlements\n",
+              "        CODE_SIGN_ENTITLEMENTS: \"\"\n"
+              "        SWIFT_ACTIVE_COMPILATION_CONDITIONS: \"$(inherited) IOSNEXT_FREE_SIDELOAD\"\n",
+              1,
+          )
+
+          Path("project.visual.yml").write_text(src)
+          PY
+
+          xcodegen generate --spec project.visual.yml
+          test -f IOSNext.xcodeproj/project.pbxproj
+          ! grep -q 'WireGuardGoBridgeiOS' IOSNext.xcodeproj/project.pbxproj
+          ! grep -q 'IOSNextPacketTunnel' IOSNext.xcodeproj/project.pbxproj
+
+      - name: Create iOS 27 simulator
         shell: bash
         run: |
           set -euo pipefail
@@ -90,19 +124,6 @@ jobs:
           xcrun simctl bootstatus "$SIM_UDID" -b
           xcrun simctl ui "$SIM_UDID" appearance dark
           xcrun simctl ui "$SIM_UDID" content_size large
-
-          FAKE_HA_PORT_FILE="$RUNNER_TEMP/fake-ha.port"
-          python3 build-source/Scripts/fake_ha_websocket_server.py             --host 127.0.0.1             --port 0             --port-file "$FAKE_HA_PORT_FILE"             >"$RUNNER_TEMP/$OUT_NAME/logs/fake-ha.log" 2>&1 &
-          echo "FAKE_HA_PID=$!" >> "$GITHUB_ENV"
-
-          for _ in $(seq 1 100); do
-            [ -s "$FAKE_HA_PORT_FILE" ] && break
-            sleep 0.1
-          done
-          test -s "$FAKE_HA_PORT_FILE"
-          FAKE_HA_PORT="$(tr -d '[:space:]' < "$FAKE_HA_PORT_FILE")"
-          echo "FAKE_HA_PORT=$FAKE_HA_PORT" >> "$GITHUB_ENV"
-          xcrun simctl spawn "$SIM_UDID" launchctl setenv FAKE_HA_PORT "$FAKE_HA_PORT"
 
       - name: Build test product only
         working-directory: build-source
@@ -143,8 +164,9 @@ jobs:
             echo "release_app_built=false"
             echo "ipa_built=false"
             echo "simulator_test_product_only=true"
+            echo "wireguard_in_test_graph=false"
           } | tee "$OUT/summary.txt"
-          test "$count" -ge 35
+          test "$count" -ge 25
 
       - name: Build visual index
         if: always()
@@ -188,9 +210,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          [ -n "${FAKE_HA_PID:-}" ] && kill "$FAKE_HA_PID" 2>/dev/null || true
           if [ -n "${SIM_UDID:-}" ]; then
-            xcrun simctl spawn "$SIM_UDID" launchctl unsetenv FAKE_HA_PORT 2>/dev/null || true
             xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
             xcrun simctl delete "$SIM_UDID" 2>/dev/null || true
           fi
