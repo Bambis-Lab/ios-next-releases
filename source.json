@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.4.1",
+          "date": "2026-10-02T07:31:13Z",
+          "localizedDescription": "## Bedienung\n\n- Lautstärke-Regler verwenden während des Ziehens einen lokalen Wert und senden die Änderung erst beim Loslassen an Home Assistant.\n- Seek-Regler verhalten sich genauso, damit Wiedergabe und UI nicht durch eine Folge konkurrierender Service-Calls ruckeln.\n- Helligkeitsregler im Nico-Zimmer verwenden denselben Drag/Commit-Pfad.\n- Farbfähige Lampen in kompakten Nico-Kacheln erhalten einen sichtbaren Einstieg in die erweiterte Lichtsteuerung. `light.kronach_schrank` kann damit Farbe, Farbtemperatur und Helligkeit direkt erreichen.\n\n## Medien / Control Center\n\n- Der synthetische Control-Center-Unlock-Sound wurde entfernt; Haptic-Feedback bleibt erhalten.\n- Dadurch soll externe Hintergrundwiedergabe wie YouTube oder Spotify beim Öffnen/Schließen der Control-Center-Ansicht nicht mehr durch eine konkurrierende AVAudioPlayer-Session unterbrochen werden.\n\n## Juli TV Schutz\n\n- `JuliTVBacklightCard` bleibt funktional unverändert.\n- Einschalten des Hintergrundlichts bleibt blockiert, solange Juli TV nicht eingeschaltet ist.\n- Long-Press öffnet weiterhin `LightControlSheet` mit `canTurnOn: tvAllowsLight` und dem bisherigen Sperrhinweis.\n\n## Build Gate\n\n- Xcode 27 / iPhoneOS 27.0\n- Version 1.4.1\n- Build 21\n- Bundle-ID `de.nicofroeba16.iosnext`\n- Basis: iOS Next 1.4.0 Build 20",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.4.1/IOSNext.ipa",
+          "size": 6108194,
+          "minOSVersion": "27.0",
+          "buildVersion": "21"
+        },
+        {
           "version": "1.4.0",
           "date": "2026-10-01T08:58:30Z",
           "localizedDescription": "Final Master Platform mit kanonischer Repository-/CI-/Runner-/Governance-Sicht, Diagnostics v3, Release Integrity, governeden Owner Actions sowie lokalem Jarvis mit iOS-27-Lifecycle und App-Intents-Systemaufruf. 30–60-Minuten-Soak ist nicht Bestandteil dieses Release-Gates.",
