@@ -157,22 +157,24 @@ jobs:
             capture_product "$screen" dark
           done
 
-          for screen in home rooms chat media system; do
+          for screen in home rooms chat media system light media-detail owner; do
             capture_product "$screen" light
           done
 
-          xcrun simctl ui "$SIM_UDID" appearance dark
-          for page in 0 1 2; do
+          for appearance in dark light; do
+            xcrun simctl ui "$SIM_UDID" appearance "$appearance"
+            for page in 0 1 2; do
             xcrun simctl terminate "$SIM_UDID" "$APP_ID" 2>/dev/null || true
             xcrun simctl launch "$SIM_UDID" "$APP_ID" --live-card-test-mode "--live-card-page=$page" >/dev/null
             sleep 0.65
             number=$((page + 1))
-            xcrun simctl io "$SIM_UDID" screenshot "$OUT/screenshots/cards-page-$number.png" >/dev/null
+            xcrun simctl io "$SIM_UDID" screenshot "$OUT/screenshots/cards-$appearance-page-$number.png" >/dev/null
+            done
           done
 
           echo "direct_static_count=$(find "$OUT/screenshots" -name '*.png' | wc -l | tr -d ' ')"             | tee "$OUT/logs/direct-capture.log"
 
-      - name: Capture interactive menus and sliders in parallel
+      - name: Capture interactive menus and sliders with bounded diagnostics
         working-directory: build-source
         shell: bash
         run: |
@@ -180,28 +182,82 @@ jobs:
           OUT="$RUNNER_TEMP/$OUT_NAME"
           rm -rf "$OUT/Interactive.xcresult" "$OUT/interactive-attachments"
 
-          xcodebuild test-without-building             -xctestrun "$XCTESTRUN_PATH"             -destination "$DESTINATION"             -only-testing:IOSNextUITests/VisualInventoryUITests             -parallel-testing-enabled NO             -resultBundlePath "$OUT/Interactive.xcresult"             | tee "$OUT/logs/interactive-inventory.log"
+          # Xcode 27 can hang for 600 seconds AFTER all UI tests pass while
+          # collecting simulator diagnostics. Preserve the xcodebuild log and
+          # bound that post-suite phase; never convert test failures to PASS.
+          python3 - <<'PY'
+          import os, pathlib, re, signal, subprocess, time
+          out = pathlib.Path(os.environ["RUNNER_TEMP"]) / os.environ["OUT_NAME"]
+          log = out / "logs/interactive-inventory.log"
+          cmd = ["xcodebuild", "test-without-building",
+                 "-xctestrun", os.environ["XCTESTRUN_PATH"],
+                 "-destination", os.environ["DESTINATION"],
+                 "-only-testing:IOSNextUITests/VisualInventoryUITests",
+                 "-parallel-testing-enabled", "NO",
+                 "-resultBundlePath", str(out / "Interactive.xcresult")]
+          with log.open("w") as dest:
+              proc = subprocess.Popen(cmd, stdout=dest, stderr=subprocess.STDOUT,
+                                      start_new_session=True)
+              passed_at = None
+              deadline = time.monotonic() + 900
+              while proc.poll() is None:
+                  content = log.read_text(errors="replace")
+                  # The actual XCTest suite must finish successfully (not
+                  # merely print a partial test-case success line).
+                  passed = ("Test Suite 'Selected tests' passed" in content and
+                            re.search(r"Executed 5 tests, with 0 failures", content))
+                  if passed and passed_at is None:
+                      passed_at = time.monotonic()
+                  if (passed_at is not None and time.monotonic()-passed_at > 25) or time.monotonic() > deadline:
+                      os.killpg(proc.pid, signal.SIGTERM)
+                      try: proc.wait(timeout=8)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(proc.pid, signal.SIGKILL)
+                          proc.wait()
+                      break
+                  time.sleep(2)
+          content = log.read_text(errors="replace")
+          suite_pass = ("Test Suite 'Selected tests' passed" in content and
+                        re.search(r"Executed 5 tests, with 0 failures", content))
+          (out / "logs/test-exit.txt").write_text(
+              f"xcodebuild_exit={proc.returncode}\\nsuite_pass={bool(suite_pass)}\\n"
+          )
+          if not suite_pass:
+              raise SystemExit("UI suite did not pass (see interactive-inventory.log)")
+          PY
 
           mkdir -p "$OUT/interactive-attachments"
-          xcrun xcresulttool export attachments             --path "$OUT/Interactive.xcresult"             --output-path "$OUT/interactive-attachments"             | tee "$OUT/logs/xcresult-export.log"
+          # Xcode may not have finalized the xcresult bundle if diagnostics
+          # were interrupted. Export errors are recorded, not concealed.
+          if test -d "$OUT/Interactive.xcresult"; then
+            xcrun xcresulttool export attachments --path "$OUT/Interactive.xcresult" --output-path "$OUT/interactive-attachments" > "$OUT/logs/xcresult-export.log" 2>&1 || true
+          fi
 
-          find "$OUT/interactive-attachments" -type f -name '*.png' -exec cp {} "$OUT/screenshots/" \;
-
-          find "$OUT/screenshots" -type f -name '*.png' -print | sort > "$OUT/screenshots/files.txt"
-          count="$(wc -l < "$OUT/screenshots/files.txt" | tr -d ' ')"
-
-          {
-            echo "VISUAL_INVENTORY=PASS"
-            echo "screenshot_count=$count"
-            echo "parallel_workers=1"
-            echo "static_capture=simctl"
-            echo "interactive_capture=xcuitest"
-            echo "wireguard_in_test_graph=false"
-            echo "build_sha=$BUILD_SHA"
-          } | tee "$OUT/summary.txt"
-
-          test "$count" -ge 25
-          rm -rf "$OUT/Interactive.xcresult" "$OUT/interactive-attachments"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os, shutil
+          root = Path(os.environ["RUNNER_TEMP"]) / os.environ["OUT_NAME"]
+          sources = sorted((root / "interactive-attachments").rglob("*.png"))
+          for index, p in enumerate(sources, 1):
+              target = root / "screenshots" / f"interactive-{index:03d}-{p.stem}.png"
+              shutil.copy2(p, target)
+          shots = sorted((root / "screenshots").glob("*.png"))
+          (root / "screenshots/files.txt").write_text("".join(f"{p.name}  {hashlib.sha256(p.read_bytes()).hexdigest()}\\n" for p in shots))
+          static = len([p for p in shots if not p.name.startswith("interactive-")])
+          interactive = len(shots) - static
+          summary = (f"VISUAL_INVENTORY={'PASS' if static >= 22 and interactive >= 3 else 'INCOMPLETE'}\\n"
+                     f"screenshot_count={len(shots)}\\nstatic_count={static}\\n"
+                     f"interactive_count={interactive}\\n"
+                     "parallel_workers=1\\nstatic_capture=simctl\\n"
+                     "interactive_capture=xcuitest\\n"
+                     "wireguard_in_test_graph=false\\n"
+                     f"build_sha={os.environ['BUILD_SHA']}\\n")
+          (root / "summary.txt").write_text(summary)
+          print(summary)
+          if static < 22 or interactive < 3 or len(shots) < 25:
+              raise SystemExit("Capture matrix incomplete; inspect screenshot files and export logs")
+          PY
+          rm -rf "$OUT/Interactive.xcresult"
 
       - name: Build HTML visual index
         if: always()
