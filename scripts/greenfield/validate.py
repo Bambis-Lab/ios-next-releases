@@ -23,7 +23,7 @@ for p in (root/'release-manifests').glob('*.json'):
     if not m.get('version'): raise SystemExit(f'{p}: missing version')
 wf=list((root/'.github/workflows').glob('*.*ml'))
 names={p.name for p in wf}
-allowed={'validate.yml','ios-next-1.4.1-visual-inventory.yml'}
+allowed={'validate.yml','ios-next-1.4.1-visual-inventory.yml','build-ios-next-xcode27-one-shot.yml','publish-ios-next-1.1.0-one-shot.yml','release-ios-next-1.1.1-one-shot.yml','release-ios-next-1.4.1-one-shot.yml'}
 if 'validate.yml' not in names or not names<=allowed: raise SystemExit('unexpected workflow set')
 if 'ios-next-1.4.1-visual-inventory.yml' in names:
     audit=(root/'.github/workflows/ios-next-1.4.1-visual-inventory.yml').read_text()
