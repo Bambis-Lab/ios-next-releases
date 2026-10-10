@@ -22,8 +22,16 @@ for p in (root/'release-manifests').glob('*.json'):
     m=json.loads(p.read_text())
     if not m.get('version'): raise SystemExit(f'{p}: missing version')
 wf=list((root/'.github/workflows').glob('*.*ml'))
-if len(wf)!=1 or wf[0].name!='validate.yml': raise SystemExit('unexpected workflow set')
-s=wf[0].read_text()
+names={p.name for p in wf}
+allowed={'validate.yml','ios-next-1.4.1-visual-inventory.yml'}
+if 'validate.yml' not in names or not names<=allowed: raise SystemExit('unexpected workflow set')
+if 'ios-next-1.4.1-visual-inventory.yml' in names:
+    audit=(root/'.github/workflows/ios-next-1.4.1-visual-inventory.yml').read_text()
+    if 'contents: read' not in audit or 'contents: write' in audit: raise SystemExit('audit workflow not read-only')
+    if 'audit/ios-next-1.4.1-visual-inventory' not in audit: raise SystemExit('audit workflow not branch-scoped')
+    if any(cmd in audit.lower() for cmd in ('gh release create','git push','git tag','publish_version.py --version')): raise SystemExit('audit workflow may publish')
+
+s=(root/'.github/workflows/validate.yml').read_text()
 if 'contents: read' not in s or 'contents: write' in s: raise SystemExit('workflow not read-only')
 for forbidden in ('gh release create','git tag','git push','publish_version.py --version'):
     if forbidden.lower() in s.lower(): raise SystemExit(f'publishing command active: {forbidden}')
