@@ -123,7 +123,7 @@ final class VisualInventoryUITests: XCTestCase {
         let pressed = tap("Home Assistant verbinden", in: landing)
         XCTAssertTrue(pressed, "Home Assistant connection setup button missing")
         if pressed {
-            let setup = landing.staticTexts["Home Assistant"].firstMatch
+            let setup = landing.navigationBars["Verbinden"]
             XCTAssertTrue(setup.waitForExistence(timeout: 5),
                           "Connection setup sheet did not appear")
             capture("setup-home-assistant", app: landing)
