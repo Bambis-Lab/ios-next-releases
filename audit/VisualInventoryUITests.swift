@@ -31,7 +31,8 @@ final class VisualInventoryUITests: XCTestCase {
         let root = app.descendants(matching: .any)
             .matching(identifier: "product-acceptance-\(screen)")
             .firstMatch
-        _ = root.waitForExistence(timeout: 4)
+        XCTAssertTrue(root.waitForExistence(timeout: 12),
+                      "Acceptance root \(screen) did not become available")
         return app
     }
 
@@ -69,23 +70,27 @@ final class VisualInventoryUITests: XCTestCase {
 
     private func route(screen: String, label: String, name: String) {
         let app = launchProduct(screen)
-        if tap(label, in: app) { capture("nav-dark-\(name)", app: app) }
+        let navigated = tap(label, in: app)
+        XCTAssertTrue(navigated, "Navigation target \(label) in \(screen) was not tappable")
+        if navigated { capture("nav-dark-\(name)", app: app) }
         app.terminate()
     }
 
     func test01SetupAndRoomNavigation() {
         let landing = launchRaw()
         capture("landing", app: landing)
-        if tap("Home Assistant verbinden", in: landing) {
-            capture("setup-home-assistant", app: landing)
-        }
+        let openedSetup = tap("Home Assistant verbinden", in: landing)
+        XCTAssertTrue(openedSetup, "Home Assistant setup button must be tappable")
+        if openedSetup { capture("setup-home-assistant", app: landing) }
         landing.terminate()
 
         route(screen: "rooms", label: "Timo Zimmer", name: "room-timo")
         route(screen: "rooms", label: "Alle Entitäten", name: "all-entities")
 
         let home = launchProduct("home")
-        if tap("Außenbereich", in: home) { capture("nav-dark-home-outdoors", app: home) }
+        let outdoorsOpened = tap("Außenbereich", in: home)
+        XCTAssertTrue(outdoorsOpened, "Outdoors navigation must be tappable")
+        if outdoorsOpened { capture("nav-dark-home-outdoors", app: home) }
         home.terminate()
     }
 
@@ -111,6 +116,7 @@ final class VisualInventoryUITests: XCTestCase {
         for screen in ["light", "media-detail"] {
             let app = launchProduct(screen)
             capture("slider-\(screen)-before", app: app)
+            var adjustments = 0
             for (index, slider) in app.sliders.allElementsBoundByIndex.enumerated() {
                 guard slider.exists else { continue }
                 if !slider.isHittable {
@@ -118,10 +124,12 @@ final class VisualInventoryUITests: XCTestCase {
                     RunLoop.current.run(until: Date().addingTimeInterval(0.08))
                 }
                 guard slider.isHittable else { continue }
+                adjustments += 1
                 slider.adjust(toNormalizedSliderPosition: index.isMultiple(of: 2) ? 0.28 : 0.72)
                 RunLoop.current.run(until: Date().addingTimeInterval(0.1))
                 capture("slider-\(screen)-\(index)-after", app: app)
             }
+            XCTAssertGreaterThan(adjustments, 0, "At least one slider on \(screen) must respond")
             app.terminate()
         }
     }
