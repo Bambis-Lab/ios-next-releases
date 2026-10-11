@@ -8,6 +8,7 @@ on:
       - ".github/workflows/ios-next-1.4.1-visual-inventory.yml"
       - "audit/VisualInventoryUITests.swift"
       - "audit/validate_visual_pngs.swift"
+      - "audit/validate_appearance_pairs.swift"
   workflow_dispatch:
 
 permissions:
@@ -89,6 +90,20 @@ jobs:
               1,
           )
 
+          # The published build is pinned and not modified in Git.
+          # Xcode on this release forces UIUserInterfaceStyle=Dark in Info.plist.
+          # Add an explicitly selected color scheme solely to the LOCAL
+          # three-page visual fixture while generating this audit build.
+          card = Path("Sources/Features/LiveHACardTestModeView.swift")
+          original = card.read_text()
+          anchor = '        .accessibilityIdentifier("live-ha-card-test-mode")'
+          assert original.count(anchor) == 1, "Live-card acceptance anchor drift"
+          card.write_text(original.replace(
+              anchor,
+              '        .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--live-card-test-dark") ? .dark : .light)\n'
+              + anchor,
+          ))
+          print("APPEARANCE_HARNESS=local-only SwiftUI colorScheme override for live-card fixture")
           Path("project.visual.yml").write_text(src)
           PY
 
@@ -180,7 +195,11 @@ jobs:
               number=$((page + 1))
               xcrun simctl terminate "$SIM_UDID" "$APP_ID" 2>/dev/null || true
               rm -f "$marker"
-              xcrun simctl launch "$SIM_UDID" "$APP_ID" --live-card-test-mode "--live-card-page=$page" "--visual-ready-nonce=$nonce"
+              if [ "$appearance" = "dark" ]; then
+                xcrun simctl launch "$SIM_UDID" "$APP_ID" --live-card-test-mode --live-card-test-dark "--live-card-page=$page" "--visual-ready-nonce=$nonce"
+              else
+                xcrun simctl launch "$SIM_UDID" "$APP_ID" --live-card-test-mode "--live-card-page=$page" "--visual-ready-nonce=$nonce"
+              fi
               wait_for_ready "$marker"
               xcrun simctl io "$SIM_UDID" screenshot "$OUT/screenshots/cards-$appearance-page-$number.png"
             done
@@ -188,6 +207,7 @@ jobs:
 
           echo "direct_static_count=$(find "$OUT/screenshots" -name '*.png' | wc -l | tr -d ' ')" | tee "$OUT/logs/direct-capture.log"
           swift ../audit/validate_visual_pngs.swift "$OUT"/screenshots/*.png | tee "$OUT/logs/static-content-validation.log"
+          swift ../audit/validate_appearance_pairs.swift "$OUT/screenshots" | tee "$OUT/logs/appearance-pairs.log"
 
       - name: Capture interactive menus and sliders with complete XCResult
         working-directory: build-source
