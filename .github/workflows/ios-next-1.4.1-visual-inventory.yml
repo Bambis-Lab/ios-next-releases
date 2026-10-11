@@ -231,15 +231,22 @@ jobs:
           log = (root / "logs/xcresult-export.log").read_text(errors="replace")
           mapping = re.findall(r'File:\s*([^,\s]+),\s*suggested name:\s*"([^"]+)"', log)
           seen = set()
+          ignored = 0
           for source_name, suggested_name in mapping:
-              original = root / "interactive-attachments" / source_name
-              if not original.is_file(): raise SystemExit(f"Missing attachment {source_name}")
-              match = re.fullmatch(r'VISUAL-INVENTORY--(.+?)_0_[0-9A-Fa-f-]+\.png', suggested_name)
-              if not match: raise SystemExit(f"Unexpected attachment: {suggested_name}")
+              # XCResult also contains auto-generated .txt/.mp4 snapshots,
+              # diagnostic hierarchies and recordings. They are not ours.
+              if not suggested_name.startswith("VISUAL-INVENTORY--"):
+                  ignored += 1
+                  continue
+              match = re.fullmatch(r'VISUAL-INVENTORY--([A-Za-z0-9-]+)_0_[0-9A-Fa-f-]+\.png', suggested_name)
+              if not match: raise SystemExit(f"Malformed visual attachment: {suggested_name}")
               name = match.group(1)
-              if name in seen: raise SystemExit(f"Duplicate attachment name: {name}")
+              original = root / "interactive-attachments" / source_name
+              if not original.is_file(): raise SystemExit(f"Missing visual PNG: {source_name}")
+              if name in seen: raise SystemExit(f"Duplicate visual attachment: {name}")
               seen.add(name)
               shutil.copy2(original, root / "screenshots" / f"interactive-{name}.png")
+          print(f"ACCEPTANCE_VISUAL_ATTACHMENTS={len(seen)} ignored_xctest_diagnostics={ignored}")
 
           shots = sorted((root / "screenshots").glob("*.png"))
           (root / "screenshots/files.txt").write_text(
@@ -248,13 +255,23 @@ jobs:
           interactive = len(shots) - static
           required = {
               "interactive-landing.png", "interactive-setup-home-assistant.png",
-              "interactive-slider-light-before.png", "interactive-slider-media-detail-before.png",
+              "interactive-nav-dark-room-timo.png", "interactive-nav-dark-room-juli.png",
+              "interactive-nav-dark-home-outdoors.png",
+              "interactive-nav-dark-system-scenes.png", "interactive-nav-dark-system-search.png",
+              "interactive-nav-dark-system-jarvis.png",
+              "interactive-nav-dark-system-live-operations.png",
+              "interactive-nav-dark-system-master-capabilities.png",
+              "interactive-nav-dark-system-control-center.png",
+              "interactive-nav-dark-system-permissions.png",
+              "interactive-nav-dark-system-diagnostics.png",
+              "interactive-slider-light-before.png", "interactive-slider-light-after.png",
+              "interactive-slider-media-detail-before.png", "interactive-slider-media-detail-after.png",
           }
           missing = sorted(required - {p.name for p in shots})
           tests = (root / "logs/interactive-inventory.log").read_text(errors="replace")
           suite_pass = ("Test Suite 'Selected tests' passed" in tests and
                         re.search(r'Executed 5 tests, with 0 failures', tests) is not None)
-          complete = suite_pass and static == 22 and interactive >= 3 and not missing
+          complete = suite_pass and static == 22 and interactive >= len(required) and not missing
           summary = "\n".join([
               f"VISUAL_INVENTORY={'PASS' if complete else 'INCOMPLETE'}",
               f"screenshot_count={len(shots)}", f"static_count={static}",
