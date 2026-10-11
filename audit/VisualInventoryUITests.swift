@@ -89,17 +89,31 @@ final class VisualInventoryUITests: XCTestCase {
     }
 
     private func tap(_ label: String, in app: XCUIApplication, identifier: String? = nil) -> Bool {
-        guard let item = locate(label, in: app, identifier: identifier) else { return false }
-        if item.isHittable {
-            item.tap()
-        } else {
-            // SwiftUI/Xcode 27 sometimes exposes valid list-row geometry but
-            // incorrectly reports isHittable=false. The coordinate must be
-            // inside the visible row; subsequent navigation is asserted.
-            let point = item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            point.tap()
+        guard locate(label, in: app, identifier: identifier) != nil else { return false }
+
+        // A geometrically visible list row can still be underneath the
+        // iOS 27 floating bottom tab bar. Bring it into the tappable center.
+        let scrolling = scrollSurface(in: app)
+        for _ in 0..<5 {
+            let candidate = target(label, in: app, identifier: identifier)
+            if candidate.exists && candidate.isHittable {
+                print("ACCEPTANCE_TAP_HITTABLE \(label) frame=\(candidate.frame)")
+                candidate.tap()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+                return true
+            }
+            scrolling.swipeUp()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.18))
         }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        let candidate = target(label, in: app, identifier: identifier)
+        guard screenVisible(candidate, app: app) else {
+            print("ACCEPTANCE_TARGET_OBSCURED \(label)")
+            return false
+        }
+        print("ACCEPTANCE_TAP_COORDINATE \(label) frame=\(candidate.frame)")
+        candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         return true
     }
 
@@ -154,8 +168,18 @@ final class VisualInventoryUITests: XCTestCase {
         route(screen: "system", label: "Master Zugriff",
               name: "system-master-capabilities", destinationTitle: "Master Zugriff",
               identifier: "system-master-capabilities")
-        route(screen: "system", label: "Control Center",
-              name: "system-control-center", destinationTitle: "Control Center")
+        // Control Center is presented using .fullScreenCover, not a push
+        // NavigationLink. Its modal close button proves the cover opened.
+        let app = launchProduct("system")
+        let pressed = tap("Control Center", in: app)
+        XCTAssertTrue(pressed, "Control Center button was not tappable")
+        if pressed {
+            let close = app.buttons["Schließen"].firstMatch
+            let presented = close.waitForExistence(timeout: 12)
+            XCTAssertTrue(presented, "Control Center full-screen cover was not presented")
+            if presented { capture("nav-dark-system-control-center", app: app) }
+        }
+        app.terminate()
     }
 
     func test04SystemNavigationC() {
@@ -180,13 +204,23 @@ final class VisualInventoryUITests: XCTestCase {
                           "Missing slider on \(screen)")
             if slider.exists {
                 let before = slider.value as? String ?? ""
-                let origin = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.5))
-                let destination = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.28, dy: 0.5))
-                origin.press(forDuration: 0.15, thenDragTo: destination)
-                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-                let after = slider.value as? String ?? ""
+                print("ACCEPTANCE_SLIDER_BEFORE \(screen): \(before)")
+                var after = before
+                // Use the native XCUI accessibility adjustment rather than
+                // beginning a drag away from the slider thumb. Require the
+                // reported value to really change; never fake success.
+                for position in [0.82, 0.18] {
+                    slider.adjust(toNormalizedSliderPosition: position)
+                    for _ in 0..<8 {
+                        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+                        after = slider.value as? String ?? ""
+                        if after != before { break }
+                    }
+                    print("ACCEPTANCE_SLIDER_ATTEMPT \(screen) target=\(position) value=\(after)")
+                    if after != before { break }
+                }
                 XCTAssertNotEqual(after, before, "Slider on \(screen) did not change value")
-                if before != after { capture("slider-\(screen)-after", app: app) }
+                if after != before { capture("slider-\(screen)-after", app: app) }
             } else {
                 print("ACCEPTANCE_SLIDER_MISSING \(screen): \(app.debugDescription)")
             }
