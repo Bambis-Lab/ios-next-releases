@@ -140,13 +140,19 @@ final class VisualInventoryUITests: XCTestCase {
     func test01SetupAndRoomNavigation() {
         let landing = launchRaw()
         capture("landing", app: landing)
-        let pressed = tap("Home Assistant verbinden", in: landing)
-        XCTAssertTrue(pressed, "Home Assistant connection setup button missing")
-        if pressed {
+        // The connection button is at y≈784 on the iPhone 18 Pro Max.
+        // This standalone onboarding view is intentionally NOT in the
+        // scrollable tab shell. Do not use the shell's y<766 safe zone:
+        // scrolling the onboarding root cannot move this button.
+        let connect = landing.buttons["Home Assistant verbinden"].firstMatch
+        let actionable = connect.waitForExistence(timeout: 10) && connect.isHittable
+        XCTAssertTrue(actionable, "Home Assistant connection setup button is not hittable")
+        if actionable {
+            connect.tap()
             let setup = landing.navigationBars["Verbinden"]
-            XCTAssertTrue(setup.waitForExistence(timeout: 5),
-                          "Connection setup sheet did not appear")
-            capture("setup-home-assistant", app: landing)
+            let presented = setup.waitForExistence(timeout: 8)
+            XCTAssertTrue(presented, "Connection setup sheet did not appear")
+            if presented { capture("setup-home-assistant", app: landing) }
         }
         landing.terminate()
 

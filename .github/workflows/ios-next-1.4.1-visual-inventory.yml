@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: ios-next-1.4.1-visual-inventory
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   visual-inventory:
