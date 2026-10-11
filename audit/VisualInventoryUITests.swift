@@ -59,61 +59,67 @@ final class VisualInventoryUITests: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
     }
 
+    private func safeTapRegion(in app: XCUIApplication) -> CGRect {
+        let bounds = app.frame
+        // Exclude the status bar / navigation-bar overlay and iOS 27's
+        // floating tab bar. The complete row CENTER must be inside this zone.
+        return CGRect(x: bounds.minX + 14,
+                      y: bounds.minY + 140,
+                      width: bounds.width - 28,
+                      height: max(100, bounds.height - 330))
+    }
+
     private func screenVisible(_ element: XCUIElement, app: XCUIApplication) -> Bool {
         guard element.exists else { return false }
         let rect = element.frame
-        let screen = app.frame
-        guard rect.width > 4, rect.height > 4 else { return false }
-        // Exclude the status bar and floating tab bar from actionable space.
-        let viewport = CGRect(x: screen.minX + 5, y: screen.minY + 65,
-                              width: screen.width - 10, height: screen.height - 160)
-        let overlap = rect.intersection(viewport)
-        return !overlap.isNull && overlap.width > 8 && overlap.height > 8
+        let zone = safeTapRegion(in: app)
+        return rect.width > 20 && rect.height > 15 &&
+            rect.midY >= zone.minY && rect.midY <= zone.maxY &&
+            rect.midX >= zone.minX && rect.midX <= zone.maxX
     }
 
-    private func locate(_ label: String, in app: XCUIApplication, identifier: String? = nil) -> XCUIElement? {
-        let scrolling = scrollSurface(in: app)
+    private func locate(_ label: String, in app: XCUIApplication,
+                        identifier: String? = nil) -> XCUIElement? {
+        let scroll = scrollSurface(in: app)
+        let zone = safeTapRegion(in: app)
         for attempt in 0..<12 {
-            let candidate = target(label, in: app, identifier: identifier)
-            if screenVisible(candidate, app: app) {
-                print("ACCEPTANCE_TARGET_FOUND \(label) label=\(candidate.label) type=\(candidate.elementType.rawValue) frame=\(candidate.frame) hittable=\(candidate.isHittable)")
-                return candidate
+            let item = target(label, in: app, identifier: identifier)
+            if screenVisible(item, app: app) {
+                print("ACCEPTANCE_TARGET_SAFE \(label) frame=\(item.frame) zone=\(zone)")
+                return item
             }
-            if attempt < 11 {
-                scrolling.swipeUp()
-                RunLoop.current.run(until: Date().addingTimeInterval(0.18))
+            if attempt == 11 { break }
+            // Never continue swiping up after a row moves into or ABOVE
+            // the tappable area. That caused July's row to end at y=61.
+            let direction: String
+            if item.exists && item.frame.midY < zone.minY {
+                scroll.swipeDown()
+                direction = "down"
+            } else {
+                scroll.swipeUp()
+                direction = "up"
             }
+            print("ACCEPTANCE_SCROLL \(label) direction=\(direction) attempt=\(attempt + 1) frame=\(item.exists ? "\(item.frame)" : "missing")")
+            RunLoop.current.run(until: Date().addingTimeInterval(0.22))
         }
-        print("ACCEPTANCE_TARGET_NOT_VISIBLE \(label): \(app.debugDescription)")
+        print("ACCEPTANCE_TARGET_UNAVAILABLE \(label): \(app.debugDescription)")
         return nil
     }
 
-    private func tap(_ label: String, in app: XCUIApplication, identifier: String? = nil) -> Bool {
-        guard locate(label, in: app, identifier: identifier) != nil else { return false }
-
-        // A geometrically visible list row can still be underneath the
-        // iOS 27 floating bottom tab bar. Bring it into the tappable center.
-        let scrolling = scrollSurface(in: app)
-        for _ in 0..<5 {
-            let candidate = target(label, in: app, identifier: identifier)
-            if candidate.exists && candidate.isHittable {
-                print("ACCEPTANCE_TAP_HITTABLE \(label) frame=\(candidate.frame)")
-                candidate.tap()
-                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-                return true
-            }
-            scrolling.swipeUp()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.18))
-        }
-
-        let candidate = target(label, in: app, identifier: identifier)
-        guard screenVisible(candidate, app: app) else {
-            print("ACCEPTANCE_TARGET_OBSCURED \(label)")
-            return false
-        }
-        print("ACCEPTANCE_TAP_COORDINATE \(label) frame=\(candidate.frame)")
-        candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    private func tap(_ label: String, in app: XCUIApplication,
+                     identifier: String? = nil, leftLabel: Bool = false) -> Bool {
+        guard let item = locate(label, in: app, identifier: identifier) else { return false }
+        let x = leftLabel ? 0.14 : 0.5
+        // Prefer coordinates once the center is in the safe region: Xcode 27
+        // reported every list row as isHittable=false, even successful links.
+        // Plain buttons (Control Center) need a hit on the left label, not
+        // the empty Spacer occupying the center of the button.
+        let point = item.coordinate(
+            withNormalizedOffset: CGVector(dx: x, dy: 0.5)
+        )
+        print("ACCEPTANCE_TAP_SAFE \(label) frame=\(item.frame) xFraction=\(x)")
+        point.tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         return true
     }
 
@@ -171,7 +177,7 @@ final class VisualInventoryUITests: XCTestCase {
         // Control Center is presented using .fullScreenCover, not a push
         // NavigationLink. Its modal close button proves the cover opened.
         let app = launchProduct("system")
-        let pressed = tap("Control Center", in: app)
+        let pressed = tap("Control Center", in: app, leftLabel: true)
         XCTAssertTrue(pressed, "Control Center button was not tappable")
         if pressed {
             let close = app.buttons["Schließen"].firstMatch
