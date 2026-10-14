@@ -1,0 +1,183 @@
+name: iOS Next 1.6.3 Build 26 - Run 214 SideStore Release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-ios-next-1.6.3-run214.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ios-next-1.6.3-run214-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_SHA: ba786f1e36ca8524ac79aef1a5e9993cf397bab2
+      VERSION: 1.6.3
+      BUILD_NUMBER: '26'
+      TAG: v1.6.3
+      ASSET: IOSNext.ipa
+    steps:
+      - name: Checkout release repo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Check release preconditions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release-notes/1.6.3.md
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path('source.json').read_text())
+          versions = doc['apps'][0]['versions']
+          assert versions[0]['version'] == '1.6.2' and versions[0]['buildVersion'] == '25'
+          assert not any(v['version'] == '1.6.3' for v in versions)
+          PY
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing overwrite"
+            exit 1
+          fi
+      - name: Checkout exact successful Run 214 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: Bambis-Lab/ios-next-build
+          ref: ba786f1e36ca8524ac79aef1a5e9993cf397bab2
+          path: app-source
+          persist-credentials: false
+      - name: Verify immutable Run 214 source and prepare version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C app-source rev-parse HEAD)" = "$BUILD_SHA"
+          xcodebuild -version
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app-source/project.yml")
+          s = p.read_text()
+          old = '        MARKETING_VERSION: 1.6.2\n        CURRENT_PROJECT_VERSION: 25\n'
+          assert s.count(old) == 1, 'unexpected source version'
+          p.write_text(s.replace(old, '        MARKETING_VERSION: 1.6.3\n        CURRENT_PROJECT_VERSION: 26\n', 1))
+          note = Path('release-notes/1.6.3.md').read_text()
+          doc = Path('app-source/Docs/Releases/1.6.3.md')
+          doc.parent.mkdir(parents=True, exist_ok=True)
+          doc.write_text(note)
+          PY
+          grep -q 'MARKETING_VERSION: 1.6.3' app-source/project.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 26' app-source/project.yml
+      - name: Prepare unsigned free-sideload project
+        working-directory: app-source
+        shell: bash
+        env:
+          CM_COMMIT: ba786f1e36ca8524ac79aef1a5e9993cf397bab2
+          EXPECTED_VERSION: 1.6.3
+          EXPECTED_BUILD: '26'
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          bash Scripts/prepare_wireguard_dependency.sh
+          bash Scripts/prepare_free_sideload_project.sh
+      - name: Build iOS device IPA
+        working-directory: app-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/iosnext-163-derived" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Validate app and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/iosnext-163-derived/Build/Products/Release-iphoneos/IOSNext.app"
+          test -d "$APP"
+          test -x "$APP/IOSNext"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = 'de.nicofroeba16.iosnext'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$BUILD_NUMBER"
+          ! find "$APP" -type d -name '*.appex' | grep -q .
+          file "$APP/IOSNext" | grep -q arm64
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('app-source/Sources/Resources/build_info.json').read_text())
+          assert data['source_commit'] == 'ba786f1e36ca8524ac79aef1a5e9993cf397bab2'
+          assert data['version'] == '1.6.3' and data['build'] == '26'
+          assert data['build_flavor'] == 'free-sideload'
+          PY
+          mkdir -p "$RUNNER_TEMP/iosnext-163-out/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/iosnext-163-out/Payload/IOSNext.app"
+          (cd "$RUNNER_TEMP/iosnext-163-out" && /usr/bin/zip -qry IOSNext.ipa Payload)
+          unzip -t "$RUNNER_TEMP/iosnext-163-out/IOSNext.ipa" >/dev/null
+          shasum -a 256 "$RUNNER_TEMP/iosnext-163-out/IOSNext.ipa"
+      - name: Preserve IPA build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOSNext-1.6.3-build26-run214
+          path: ${{ runner.temp }}/iosnext-163-out/IOSNext.ipa
+          retention-days: 90
+          if-no-files-found: error
+      - name: Publish GitHub release then SideStore feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$RUNNER_TEMP/iosnext-163-out/IOSNext.ipa"
+          test -s "$IPA"
+          gh release create "$TAG" "$IPA#$ASSET" \
+            --title 'iOS Next 1.6.3 (Build 26)' \
+            --notes-file release-notes/1.6.3.md \
+            --target main
+          PUBLISHED_AT="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq .published_at)"
+          SIZE="$(stat -f '%z' "$IPA")"
+          SHA="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$ASSET"
+          python3 scripts/publish_version.py --version "$VERSION" --build-version "$BUILD_NUMBER" \
+            --date "$PUBLISHED_AT" --download-url "$URL" --size "$SIZE" --min-os-version 27.0
+          python3 - "$SIZE" "$SHA" "$PUBLISHED_AT" <<'PY'
+          import json,sys
+          from pathlib import Path
+          size,digest,published = sys.argv[1:]
+          manifest = {
+            "schema_version":1,"status":"published",
+            "app":"iOS Next","version":"1.6.3","build_version":"26",
+            "bundle_identifier":"de.nicofroeba16.iosnext","min_os_version":"27.0",
+            "source_repository":"Bambis-Lab/ios-next-build",
+            "source_commit":"ba786f1e36ca8524ac79aef1a5e9993cf397bab2",
+            "acceptance_run":38265537869,
+            "release_tag":"v1.6.3","asset":"IOSNext.ipa",
+            "ipa_size":int(size),"ipa_sha256":digest,"published_at":published,
+            "rollback":{"version":"1.6.2","build_version":"25","release_tag":"v1.6.2"}
+          }
+          Path('release-manifests/1.6.3.json').write_text(json.dumps(manifest,indent=2)+"\n")
+          PY
+          python3 -m json.tool source.json >/dev/null
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source.json release-manifests/1.6.3.json
+          git commit -m 'release: publish iOS Next 1.6.3 build 26 from run 214 [skip ci]'
+          git push origin main
+      - name: Verify actual published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets
+          git fetch origin main
+          git show origin/main:source.json | python3 -c 'import json,sys; x=json.load(sys.stdin)["apps"][0]["versions"][0]; assert x["version"]=="1.6.3" and x["buildVersion"]=="26"; print("SIDESTORE_FEED_VERIFIED")'
