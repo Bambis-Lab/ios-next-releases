@@ -22,8 +22,29 @@ for p in (root/'release-manifests').glob('*.json'):
     m=json.loads(p.read_text())
     if not m.get('version'): raise SystemExit(f'{p}: missing version')
 wf=list((root/'.github/workflows').glob('*.*ml'))
-if len(wf)!=1 or wf[0].name!='validate.yml': raise SystemExit('unexpected workflow set')
-s=wf[0].read_text()
+# The original one-workflow greenfield guard predates the approved SideStore
+# release pipeline. Keep a strict *explicit* workflow inventory instead of
+# implicitly allowing arbitrary write-capable automation.
+approved_workflows={
+    'validate.yml',
+    'build-ios-next-xcode27-one-shot.yml',
+    'publish-ios-next-1.1.0-one-shot.yml',
+    'release-ios-next-1.1.1-one-shot.yml',
+    'release-ios-next-1.4.1-one-shot.yml',
+    'release-ios-next-1.6.2-one-shot.yml',
+    'release-ios-next-1.6.3-run214.yml',
+    'release-ios-next-1.7.0-g99.yml',
+}
+actual_workflows={p.name for p in wf}
+if actual_workflows!=approved_workflows:
+    raise SystemExit(f'unexpected workflow set: added={sorted(actual_workflows-approved_workflows)} missing={sorted(approved_workflows-actual_workflows)}')
+for p in wf:
+    body=p.read_text()
+    if not body.startswith('name: ') or 'permissions:' not in body:
+        raise SystemExit(f'workflow header/permissions missing: {p.name}')
+    if p.name!='validate.yml' and 'contents: write' not in body and 'contents: read' not in body:
+        raise SystemExit(f'workflow must declare content permissions: {p.name}')
+s=(root/'.github/workflows/validate.yml').read_text()
 if 'contents: read' not in s or 'contents: write' in s: raise SystemExit('workflow not read-only')
 for forbidden in ('gh release create','git tag','git push','publish_version.py --version'):
     if forbidden.lower() in s.lower(): raise SystemExit(f'publishing command active: {forbidden}')
