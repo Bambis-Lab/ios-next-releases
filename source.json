@@ -12,6 +12,15 @@
       "iconURL": "https://raw.githubusercontent.com/Bambis-Lab/ios-next-releases/main/assets/icon.jpg",
       "versions": [
         {
+          "version": "1.7.0",
+          "date": "2026-10-15T13:51:06Z",
+          "localizedDescription": "- Überarbeitete Runner-Seite mit kompakten Kapazitäts- und Ressourcenanzeigen, sichtbaren laufenden Jobs sowie einklappbarer Diagnose und Steuerung.\n- Vereinfachte Projekte-Seite mit besser lesbaren Projektkarten, aktualisierbarer Liste und kompakter Erklärung fehlender GitHub-CI-Snapshots.\n- Korrekte deutsche Job-Statusbezeichnungen, Singular/Plural bei Jobs, Projekten und Tickets sowie überarbeiteter Zeitstempeldarstellung.\n- Verbesserte Abstände an der unteren Navigation und kompaktere Runner-Statuskarte.\n- Verschlankte iPhone-only-Abnahme mit stabilisierter XCTest-Startdiagnose; Xcode 27 / iPhone 18 Pro Max, G99-Lauf #38741158890 vollständig erfolgreich.\n- Vier zusätzliche Runner-/Projekte-Screenshots in Light und Dark automatisiert erzeugt; die zuvor erkannten kleineren Oberflächenprobleme sind korrigiert.\n- SideStore-kompatible unsignierte ARM64-IPA ohne Packet-Tunnel-Erweiterung; SideStore signiert die App für das eigene Gerät.\n- Die Verbindung zu echten Owner-Backend-GitHub-CI-Snapshots bleibt eine separate Backend-Aufgabe; Test-Screenshots enthalten ausschließlich lokale Beispieldaten.",
+          "downloadURL": "https://github.com/Bambis-Lab/ios-next-releases/releases/download/v1.7.0/IOSNext.ipa",
+          "size": 6664440,
+          "minOSVersion": "27.0",
+          "buildVersion": "28"
+        },
+        {
           "version": "1.6.3",
           "date": "2026-10-14T16:34:35Z",
           "localizedDescription": "- Enthält den erfolgreich geprüften Optimierungsstand aus Xcode Run #214 (Quellstand `ba786f1e36ca8524ac79aef1a5e9993cf397bab2`).\n- Verbesserte App-Lebenszyklusverwaltung, Chat-Verbindung und Nebenläufigkeitssteuerung.\n- Optimierte Home-Assistant-Aktionen, Suchindex, Medienansichten und Dashboard-Aktualisierungen.\n- Ergänzte Factory-Workspace-Oberfläche, Runner- und Netzwerkbehandlung.\n- iPhone- und iPad-Abnahme in Run #214 bestanden; reale Factory-Anmeldung muss weiterhin auf einem Gerät bestätigt werden.\n- Unsigned Free-Sideload-IPA für die Signierung durch SideStore; keine Packet-Tunnel-Erweiterung.",
