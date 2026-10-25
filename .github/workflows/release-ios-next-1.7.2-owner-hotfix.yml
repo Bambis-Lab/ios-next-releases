@@ -3,7 +3,7 @@ name: iOS Next 1.7.2 Build 30 - Explicit Owner-Authorized SideStore Release
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/release-ios-next-1.7.2-gated.yml']
+    paths: ['.github/workflows/release-ios-next-1.7.2-owner-hotfix.yml']
 permissions:
   contents: write
 concurrency:
