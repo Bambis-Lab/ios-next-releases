@@ -1,5 +1,5 @@
-# Explicit owner-authorized hotfix; immutable source and acceptance gate.
 name: iOS Next 1.7.2 Build 30 - Explicit Owner-Authorized SideStore Release
+# Explicit owner-authorized hotfix; immutable source and acceptance gate.
 on:
   push:
     branches: [main]
