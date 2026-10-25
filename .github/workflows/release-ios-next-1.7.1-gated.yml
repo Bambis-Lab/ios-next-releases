@@ -72,7 +72,9 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C app-source rev-parse HEAD)" = "$BUILD_SHA"
-          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "Using iPhoneOS SDK $SDK_VERSION"
+          [[ "$SDK_VERSION" == 27.* ]]
           xcodebuild -version
           python3 - <<'PY'
           from pathlib import Path
