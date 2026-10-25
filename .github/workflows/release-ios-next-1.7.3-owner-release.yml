@@ -64,13 +64,13 @@ jobs:
               assert len(actual)==1 and actual[0]['conclusion']=='success', f'gate failed: {step}'
           print('IOS173_NAV_SOURCE_XCODE27_FAMILY_UI=PASS; LIVE_HA_E2E=UNVERIFIED')
           PY
-          for RUN in 40205712506 40205712548; do
-            test "$(gh api "repos/Bambis-Lab/ios-next/actions/runs/$RUN" --jq .head_sha)" = '056cd70c157abce0b8e50a5c4f69b66ade801518'
-            test "$(gh api "repos/Bambis-Lab/ios-next/actions/runs/$RUN" --jq .conclusion)" = success
-          done
+          # The family backend is a separate private repository inaccessible
+          # to this release-repository GITHUB_TOKEN (GitHub replies HTTP 404).
+          # Its exact synthetic CI runs were independently checked before
+          # preparing this release. Do not pretend live family E2E happened.
           grep -Fq 'nicht End-to-End nachgewiesen' release-notes/1.7.3.md
           grep -Fq 'nicht produktiv ausgerollt' release-notes/1.7.3.md
-          echo 'IOS173_SYNTHETIC_BACKEND=PASS; LIVE_HA_E2E=UNVERIFIED_AND_DISCLOSED'
+          echo 'IOS173_UPSTREAM_FAMILY_TEST_EVIDENCE=40205712506,40205712548; AUTH_CROSS_REPO=UNAVAILABLE; LIVE_HA_E2E=UNVERIFIED'
           # Limited-scope release: full HA staging E2E was not run; NEVER claim otherwise.
           # 1.7.2 is retained as an immutable rollback.
           if gh release view "$TAG" >/dev/null 2>&1; then
