@@ -35,6 +35,7 @@ approved_workflows={
     'release-ios-next-1.6.3-run214.yml',
     'release-ios-next-1.7.0-g99.yml',
     'release-ios-next-1.7.1-gated.yml',
+    'release-ios-next-1.7.2-owner-hotfix.yml',
 }
 actual_workflows={p.name for p in wf}
 if actual_workflows!=approved_workflows:
