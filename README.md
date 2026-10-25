@@ -19,7 +19,7 @@ SideStore deep link:
 - App: iOS Next
 - Bundle Identifier: `de.nicofroeba16.iosnext`
 - Source Identifier: `de.nicofroeba16.iosnext.source`
-- Current published version: `1.0.8`
+- Current published version: `1.7.0` (1.7.1 is pending validated IPA and staging gates)
 - Expected release asset name: `IOSNext.ipa`
 
 ## What's New policy
