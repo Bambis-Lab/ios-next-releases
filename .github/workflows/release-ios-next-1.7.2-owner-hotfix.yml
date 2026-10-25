@@ -1,0 +1,214 @@
+name: iOS Next 1.7.2 Build 30 - Explicit Owner-Authorized SideStore Release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-ios-next-1.7.2-gated.yml']
+permissions:
+  contents: write
+concurrency:
+  group: ios-next-1.7.2-owner-authorized-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      BUILD_SHA: eff83b85f7d398534e99d11bcdeb584fd0e4752d
+      VERSION: 1.7.2
+      BUILD_NUMBER: '30'
+      TAG: v1.7.2
+      ASSET: IOSNext.ipa
+    steps:
+      - name: Checkout release repo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Check release preconditions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release-notes/1.7.2.md
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path('source.json').read_text())
+          versions = doc['apps'][0]['versions']
+          assert versions[0]['version'] == '1.7.1' and versions[0]['buildVersion'] == '29'
+          assert not any(v['version'] == '1.7.2' for v in versions)
+          PY
+          # This is the owner's explicit immediate-release authorization.
+          # Do not claim a real five-account HA staging/G99 acceptance. Require
+          # the actually passed source, targeted Swift XCTest and family iPhone UI gates
+          # on the exact source, and a successful real iPhoneOS build.
+          test "$(gh api repos/Bambis-Lab/ios-next-build/actions/runs/40156720082 --jq .head_sha)" = "$BUILD_SHA"
+          gh api repos/Bambis-Lab/ios-next-build/actions/runs/40156720082/jobs?per_page=100 > "$RUNNER_TEMP/ios172-acceptance-jobs.json"
+          python3 - "$RUNNER_TEMP/ios172-acceptance-jobs.json" <<'PY'
+          import json,sys
+          jobs=json.load(open(sys.argv[1]))['jobs']
+          for name in ('source','xcode27'):
+              matching=[j for j in jobs if j['name']==name]
+              assert len(matching)==1 and matching[0]['conclusion']=='success', f'required tested gate: {name}'
+          xcode=next(j for j in jobs if j['name']=='xcode27')
+          required_steps=(
+              'Build targeted XCTest bundle before cold simulator startup',
+              'Confirm iPhone runtime is actually booted after build warmup',
+              'Execute family authorization and navigation XCTest',
+              'Smoke-test existing Factory entry and family member UI guards',
+          )
+          for step in required_steps:
+              actual=[step_record for step_record in xcode.get('steps',[]) if step_record['name']==step]
+              assert len(actual)==1 and actual[0]['conclusion']=='success', f'gate failed: {step}'
+          print('IOS172_NAV_SOURCE_XCODE27_FAMILY_UI=PASS; LIVE_HA_E2E=UNVERIFIED')
+          PY
+          # Hotfix: full HA staging E2E was not run; do not imply otherwise.
+          # 1.7.1 is retained as an immutable rollback.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing overwrite"
+            exit 1
+          fi
+      - name: Checkout pinned source with passed Swift + family iPhone checks
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: Bambis-Lab/ios-next-build
+          ref: eff83b85f7d398534e99d11bcdeb584fd0e4752d
+          path: app-source
+          persist-credentials: false
+      - name: Verify pinned app source and prepare release version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C app-source rev-parse HEAD)" = "$BUILD_SHA"
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "Using iPhoneOS SDK $SDK_VERSION"
+          [[ "$SDK_VERSION" == 27.* ]]
+          xcodebuild -version
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app-source/project.yml")
+          s = p.read_text()
+          old = '        MARKETING_VERSION: 1.6.4\n        CURRENT_PROJECT_VERSION: 27\n'
+          assert s.count(old) == 1, 'unexpected source version'
+          p.write_text(s.replace(old, '        MARKETING_VERSION: 1.7.2\n        CURRENT_PROJECT_VERSION: 30\n', 1))
+          note = Path('release-notes/1.7.2.md').read_text()
+          doc = Path('app-source/Docs/Releases/1.7.2.md')
+          doc.parent.mkdir(parents=True, exist_ok=True)
+          doc.write_text(note)
+          PY
+          grep -q 'MARKETING_VERSION: 1.7.2' app-source/project.yml
+          grep -q 'CURRENT_PROJECT_VERSION: 30' app-source/project.yml
+      - name: Prepare unsigned free-sideload project
+        working-directory: app-source
+        shell: bash
+        env:
+          CM_COMMIT: eff83b85f7d398534e99d11bcdeb584fd0e4752d
+          EXPECTED_VERSION: 1.7.2
+          EXPECTED_BUILD: '30'
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          bash Scripts/prepare_free_sideload_project.sh
+      - name: Build iOS device IPA
+        working-directory: app-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project IOSNext.xcodeproj \
+            -scheme IOSNext \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/iosnext-171-derived" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Validate app and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/iosnext-171-derived/Build/Products/Release-iphoneos/IOSNext.app"
+          test -d "$APP"
+          test -x "$APP/IOSNext"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = 'de.nicofroeba16.iosnext'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$BUILD_NUMBER"
+          ! find "$APP" -type d -name '*.appex' | grep -q .
+          file "$APP/IOSNext" | grep -q arm64
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('app-source/Sources/Resources/build_info.json').read_text())
+          assert data['source_commit'] == 'eff83b85f7d398534e99d11bcdeb584fd0e4752d'
+          assert data['version'] == '1.7.2' and data['build'] == '30'
+          assert data['build_flavor'] == 'free-sideload'
+          PY
+          mkdir -p "$RUNNER_TEMP/iosnext-171-out/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/iosnext-171-out/Payload/IOSNext.app"
+          (cd "$RUNNER_TEMP/iosnext-171-out" && /usr/bin/zip -qry IOSNext.ipa Payload)
+          unzip -t "$RUNNER_TEMP/iosnext-171-out/IOSNext.ipa" >/dev/null
+          shasum -a 256 "$RUNNER_TEMP/iosnext-171-out/IOSNext.ipa"
+      - name: Preserve IPA build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOSNext-1.7.2-build30-owner-release
+          path: ${{ runner.temp }}/iosnext-171-out/IOSNext.ipa
+          retention-days: 90
+          if-no-files-found: error
+      - name: Publish GitHub release then SideStore feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$RUNNER_TEMP/iosnext-171-out/IOSNext.ipa"
+          test -s "$IPA"
+          gh release create "$TAG" "$IPA#$ASSET" \
+            --title 'iOS Next 1.7.2 (Build 30)' \
+            --notes-file release-notes/1.7.2.md \
+            --target main
+          PUBLISHED_AT="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq .published_at)"
+          SIZE="$(stat -f '%z' "$IPA")"
+          SHA="$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$ASSET"
+          python3 scripts/publish_version.py --version "$VERSION" --build-version "$BUILD_NUMBER" \
+            --date "$PUBLISHED_AT" --download-url "$URL" --size "$SIZE" --min-os-version 27.0
+          python3 - "$SIZE" "$SHA" "$PUBLISHED_AT" <<'PY'
+          import json,sys
+          from pathlib import Path
+          size,digest,published = sys.argv[1:]
+          manifest = {
+            "schema_version":1,"status":"published",
+            "app":"iOS Next","version":"1.7.2","build_version":"30",
+            "bundle_identifier":"de.nicofroeba16.iosnext","min_os_version":"27.0",
+            "source_repository":"Bambis-Lab/ios-next-build",
+            "source_commit":"eff83b85f7d398534e99d11bcdeb584fd0e4752d",
+            "acceptance_run":40156720082,
+            "device_ipa_compile":"release_workflow_after_source_and_ui_gates",
+            "real_ha_staging_e2e":"unverified",
+            "release_authority":"explicit_owner_release_2026-10-25",
+            "release_tag":"v1.7.2","asset":"IOSNext.ipa",
+            "ipa_size":int(size),"ipa_sha256":digest,"published_at":published,
+            "rollback":{"version":"1.7.1","build_version":"29","release_tag":"v1.7.1"}
+          }
+          Path('release-manifests/1.7.2.json').write_text(json.dumps(manifest,indent=2)+"\n")
+          PY
+          python3 -m json.tool source.json >/dev/null
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source.json release-manifests/1.7.2.json
+          git commit -m 'release: publish owner-approved iOS Next 1.7.2 build 30 [skip ci]'
+          git push origin main
+      - name: Verify actual published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets
+          git fetch origin main
+          git show origin/main:source.json | python3 -c 'import json,sys; x=json.load(sys.stdin)["apps"][0]["versions"][0]; assert x["version"]=="1.7.2" and x["buildVersion"]=="30"; print("SIDESTORE_FEED_VERIFIED")'
