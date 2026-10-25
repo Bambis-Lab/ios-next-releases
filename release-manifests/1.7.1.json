@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "published",
+  "app": "iOS Next",
+  "version": "1.7.1",
+  "build_version": "29",
+  "bundle_identifier": "de.nicofroeba16.iosnext",
+  "min_os_version": "27.0",
+  "source_repository": "Bambis-Lab/ios-next-build",
+  "source_commit": "bcaedcdc622ea298e4dd20670f2b2c8aeabeacbe",
+  "acceptance_run": 40148370046,
+  "device_ipa_compile_run": 40149957824,
+  "real_ha_staging_e2e": "unverified",
+  "release_authority": "explicit_owner_go_2026-10-25",
+  "release_tag": "v1.7.1",
+  "asset": "IOSNext.ipa",
+  "ipa_size": 6873327,
+  "ipa_sha256": "be015e9393d6f893f4d76356f7b94b6ac6acfb969c86f0f695683430a7389569",
+  "published_at": "2026-10-25T01:38:00Z",
+  "rollback": {
+    "version": "1.7.0",
+    "build_version": "28",
+    "release_tag": "v1.7.0"
+  }
+}
